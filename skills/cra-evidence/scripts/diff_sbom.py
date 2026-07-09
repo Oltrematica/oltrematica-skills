@@ -19,7 +19,8 @@ def load_components(path):
         print(f"ERROR: cannot read SBOM {path}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    if not isinstance(doc, dict) or not isinstance(doc.get("components", []), list):
+    if (not isinstance(doc, dict) or doc.get("bomFormat") != "CycloneDX"
+            or not isinstance(doc.get("components", []), list)):
         print(f"ERROR: not a CycloneDX SBOM document: {path}", file=sys.stderr)
         sys.exit(1)
 
