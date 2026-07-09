@@ -14,3 +14,24 @@ fixtures in `tests/fixtures/`. Append a dated section per test run.
 Lockfiles are hand-written (no installed `node_modules/` or `vendor/`) —
 syft and grype read lockfiles directly. `compliance/` output generated inside
 fixtures during tests is gitignored.
+
+## 2026-07-09 — gen_sbom.sh
+
+**Tools verified**: `syft` at `/opt/homebrew/bin/syft`, `grype` at `/opt/homebrew/bin/grype`
+
+**Fixture tests (Step 2: RED, Steps 4–5: GREEN):**
+
+| Step | Test | Result |
+|------|------|--------|
+| 2 | Script missing | FAIL: `No such file or directory` ✓ |
+| 4a | `node-minimal v1.0.0` | 3 components; **lodash detected** ✓ |
+| 4b | `laravel-minimal v1.0.0` | 2 components; **guzzlehttp/guzzle detected** ✓ |
+| 4c | `polyglot v1.0.0` | 5 components; **both lodash AND guzzlehttp/guzzle detected** ✓ |
+| 5 | Missing syft (env PATH=/usr/bin:/bin) | exit 127; stderr: "syft not found" + "brew install syft" hint ✓ |
+
+**Output files created** (gitignored):
+- `tests/fixtures/node-minimal/compliance/sbom/v1.0.0.cdx.json`
+- `tests/fixtures/laravel-minimal/compliance/sbom/v1.0.0.cdx.json`
+- `tests/fixtures/polyglot/compliance/sbom/v1.0.0.cdx.json`
+
+**Summary**: gen_sbom.sh contract verified: produces CycloneDX JSON SBOMs with correct component detection across all three fixture ecosystems (npm, composer, polyglot). Error handling for missing syft confirmed (exit 127 + hint). Ready for consumption by Task 5 (diff_sbom.py) and Task 6 (scan_vulns.sh).
