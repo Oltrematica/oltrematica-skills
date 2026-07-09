@@ -1,0 +1,3 @@
+.DS_Store
+tests/fixtures/*/compliance/
+node_modules/
