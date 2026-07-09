@@ -104,3 +104,47 @@ exit=127
 - **missing-scanner path**: fully tested and verified (exit 127 + helpful hints)
 
 **Summary**: scan_vulns.sh contract verified: grype (0.115.0) successfully scans node-minimal (6 lodash findings) and laravel-minimal (7 guzzlehttp/guzzle findings); output files written alongside SBOMs with .vulns.json extension; scanner name reported on stderr; output path on stdout. Missing-scanner error handling confirmed (exit 127 + installation hints). osv-scanner fallback branch untested on this machine (tool not installed) but verified by code reading. Ready for consumption by Task 8 (W2 triage drafting).
+
+## 2026-07-09 — a11y_scan.sh
+
+**Tools verified**: Node v24.12.0 / npx 11.6.2 (via nvm); Google Chrome 149.0.7827.201 at `/Applications/Google Chrome.app`; `@axe-core/cli` resolved on-demand via `npx --yes` (axe-core 4.12.1).
+
+**Step 1: RED test (script missing)**
+
+```bash
+$ bash skills/cra-evidence/scripts/a11y_scan.sh http://localhost /tmp/a11y /
+bash: skills/cra-evidence/scripts/a11y_scan.sh: No such file or directory
+exit=127
+```
+✓ Expected: fails before implementation
+
+**Step 3: Argument validation and missing-tool tests**
+
+| # | Test | Command | Result |
+|---|------|---------|--------|
+| 1 | Missing route argument | `a11y_scan.sh http://localhost /tmp/a11y-test` | ✓ stderr: "ERROR: at least one route required (e.g. /)"; exit=2 |
+| 2 | Missing npx (PATH stripped) | `env PATH=/usr/bin:/bin bash a11y_scan.sh http://localhost /tmp/a11y-test /` | ✓ stderr: "ERROR: npx (Node.js) not found..." + "Install Node.js: brew install node" hint; exit=127 |
+
+**Step 4: Live verification against local static fixture (best effort)**
+
+Fixture: `<img src="x.png">` (missing alt) + `<input type="text">` (missing label) + no `lang` attribute on `<html>`, served via `python3 -m http.server 8931` from a `mktemp -d` scratch dir.
+
+```bash
+$ bash skills/cra-evidence/scripts/a11y_scan.sh http://localhost:8931 "$SCRATCH/out" /
+Running axe-core 4.12.1 in chrome-headless
+Error: session not created: This version of ChromeDriver only supports Chrome version 150
+Current browser version is 149.0.7827.201 with binary path /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+WARN: axe scan failed for / (browser/webdriver missing or page unreachable) — continuing
+ERROR: all 1 route scans failed.
+exit=1
+```
+
+**Outcome: graceful degradation path** (not the successful-scan path). `@axe-core/cli`'s bundled ChromeDriver expects Chrome 150; the installed Chrome is 149.0.7827.201, so the webdriver session could not start. Per the brief, this is an explicitly allowed outcome: the WARN + "all 1 route scans failed" message and exit=1 confirm the graceful-degradation contract works correctly. `$SCRATCH/out` was created (via `mkdir -p`) but contains no `axe-root.json`, consistent with a fully-failed scan. Local http.server (PID tracked explicitly, not via `%1` job control) was killed and confirmed stopped after the test; `$SCRATCH` was a `mktemp -d` temp dir, not committed.
+
+**Coverage notes:**
+- **Argument validation (no routes)**: fully tested and verified (exit 2 + message)
+- **Missing-npx path**: fully tested and verified (exit 127 + install hint)
+- **Multi-route WARN-and-continue loop**: not exercised with a real successful scan on this machine (Chrome/ChromeDriver version mismatch); the single-route all-failed branch was exercised and confirmed; the per-route WARN-and-continue logic and the "$FAILED -eq $#" all-failed check were verified by reading the script
+- **Successful-scan path (violations detected in JSON)**: not exercised on this machine — see graceful-degradation note above
+
+**Summary**: a11y_scan.sh contract verified: argument validation (exit 2, no routes) and missing-npx handling (exit 127 + hint) both confirmed with exact expected output. Live scan against a local fixture hit a ChromeDriver/Chrome version mismatch (150 vs 149) rather than a successful axe run; the script's graceful-degradation path (WARN per failed route, exit 1 with "all N route scans failed" when every route fails) worked exactly as designed. Ready for consumption by Task 8 (W4), with the caveat that a successful violation-detecting scan should be re-verified on a machine with matching Chrome/ChromeDriver versions before being relied upon as end-to-end proof.
