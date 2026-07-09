@@ -78,7 +78,7 @@ There are no tagged releases of this repo yet; updating means tracking
 ## Future: plugin conversion
 
 Deliberate deviation from the original brief: this repo ships as a plain
-skills repo (`skills/`, `docs/`, `tests/`), not a plugin marketplace — see
+skills repo (`skills/`, `docs/`, `tests/`), not a plugin marketplace (chosen on 2026-07-09) — see
 [`docs/superpowers/specs/2026-07-09-compliance-skills-repo-design.md`](superpowers/specs/2026-07-09-compliance-skills-repo-design.md)
 for the rationale. Converting to a plugin later is a sketch, not a design:
 add a `.claude-plugin/marketplace.json` at the repo root, a `plugin.json` per

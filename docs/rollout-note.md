@@ -8,11 +8,12 @@ Two Claude Code skills, one repo:
 - `cra-evidence` — generates and maintains the CRA evidence package (SBOM,
   vulnerability triage, Annex I gap report, EAA/WCAG module).
 
-Install either one in two commands:
+Install either one with a clone and two copies:
 
 ```bash
-cp -R skills/cra-evidence  /path/to/repo/.claude/skills/cra-evidence
-cp -R skills/adr-management /path/to/repo/.claude/skills/adr-management
+git clone https://github.com/Oltrematica/oltrematica-compliance-skills.git /tmp/ocs
+cp -R /tmp/ocs/skills/cra-evidence  /path/to/repo/.claude/skills/cra-evidence
+cp -R /tmp/ocs/skills/adr-management /path/to/repo/.claude/skills/adr-management
 ```
 
 Full options in [`docs/distribution.md`](distribution.md).
