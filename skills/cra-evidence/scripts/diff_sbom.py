@@ -5,7 +5,7 @@ Usage: diff_sbom.py OLD.cdx.json NEW.cdx.json [--json]
 
 Prints a Markdown diff (Added / Removed / Version changed) to stdout,
 or a JSON object with --json. Components are keyed by "group/name"
-(group omitted when absent). Exit codes: 0 ok, 1 unreadable input, 2 usage.
+(group omitted when absent). Exit codes: 0 ok, 1 unreadable/invalid input, 2 usage.
 """
 import json
 import sys
@@ -18,8 +18,15 @@ def load_components(path):
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
         print(f"ERROR: cannot read SBOM {path}: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if not isinstance(doc, dict) or not isinstance(doc.get("components", []), list):
+        print(f"ERROR: not a CycloneDX SBOM document: {path}", file=sys.stderr)
+        sys.exit(1)
+
     comps = {}
     for c in doc.get("components", []):
+        if not isinstance(c, dict):
+            continue
         name = c.get("name", "")
         group = c.get("group") or ""
         key = f"{group}/{name}" if group else name
