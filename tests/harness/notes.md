@@ -88,6 +88,22 @@ five fixture defects surfaced in the JSON; error path clean; hardened and
 regression-tested against malformed JSON inputs, unreadable files, odd repo
 paths, and a missing `python3`.
 
+## 2026-07-14 — addendum: surface and skill counts grew after this entry
+
+The "inventory.sh" entry above (`## 2026-07-14 — inventory.sh`) is left
+unedited as the honest record of what was true when it was written: at that
+point `inventory.sh` reported **seven** surfaces and the harness track had
+**four** skills. Both grew later the same day (Task 13 added `model-routing`
+as the fifth harness skill; Task 14 added it as `inventory.sh`'s eighth
+audited surface, `model_routing`) — see
+`skills/harness/harness-audit/scripts/inventory.sh` (now emits eight JSON
+keys) and `tests/harness/trigger-validation.md` (now covers five skills).
+Re-running `bash tests/harness/inventory.sh.test` today against current
+`main` gives `PASS=35 FAIL=0` (up from the `PASS=23 FAIL=0` recorded above,
+reflecting the eighth-surface assertions and their robustness cases added
+since). This note documents the growth; it does not retroactively rewrite
+the entry above.
+
 ## 2026-07-14 — claude-md-authoring (no script; judgement rehearsal)
 
 Ran the SKILL.md diagnostic workflow against the `bad-harness` fixture by hand:
