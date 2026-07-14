@@ -18,13 +18,14 @@ vs. `model-routing` on "model tier"). Judge model: Claude Haiku, dispatched via 
 dispatch prompt (see "Notes on the harness-eval procedure" at the end — this
 harness has no subagent type with a genuinely empty tool list).
 
-**336 total judgements** across 112 row-instances, after the adversarial-review
-follow-up documented later in this file (Findings 1–3): 51 final rows (11 for
-`harness-audit`, 10 each for the other four skills) plus 61 superseded rows from
-`harness-audit`'s four discarded rounds and `model-routing`'s two discarded
-rounds, all at 3 judges/row = 112 × 3 = 336. See "## Outcome" at the end of this
+**372 total judgements** across 124 row-instances, after two adversarial-review
+follow-ups documented later in this file (Findings 1–3, and Finding 7's
+predicted CRA/harness-audit cross-trigger): 52 final rows (12 for
+`harness-audit`, 10 each for the other four skills) plus 72 superseded rows from
+`harness-audit`'s five discarded rounds and `model-routing`'s two discarded
+rounds, all at 3 judges/row = 124 × 3 = 372. See "## Outcome" at the end of this
 file for the full reconciliation; the figure was 210 judgements / 70 row-instances
-before the follow-up ran.
+before the first follow-up ran, and 336 / 112 before the second one.
 
 ## harness-audit — round 1 (original description, before this task's boundary fix)
 
@@ -317,6 +318,56 @@ states a boundary between two domains, not an exception for the single word
 which the quorum decided belongs to `claude-md-authoring`, not here — proven, not
 pre-judged).**
 
+## Adversarial-review follow-up 2 (Finding 7, same date)
+
+A second review — a five-lens adversarial review of the whole harness track —
+predicted one additional cross-trigger not covered by rounds 1–5: a prompt
+blending `harness-audit`'s own vocabulary (".claude setup") with
+`cra-evidence`'s (compliance track) vocabulary ("CRA requirements") in a single
+sentence was predicted to split a 3-judge quorum: *"does our .claude setup meet
+CRA requirements for AI-assisted development?"*
+
+Added to `harness-audit`'s spec as row 12, `expect: no-trigger`, reasoning from
+the same boundary rule already used for row 10 ("are we CRA ready?"): a question
+about the product's regulatory posture is compliance territory, not the
+harness's own scaffolding — even when the same sentence also uses this skill's
+own vocabulary. This was tested, not pre-judged: the row was added and the full
+spec re-run, not hand-waved as an obvious pass. Same procedure as every prior
+round: 3 fresh, blind subagents per prompt (36 dispatches for the 12-row spec),
+each given only the `description:` text and one prompt, dispatched via
+`general-purpose` with an explicit no-tool instruction — every dispatch's
+returned usage metadata showed `tool_uses: 0`, confirming no judge exercised a
+tool — and the judge model pinned to `haiku` on every one of the 36 calls.
+
+## harness-audit — round 6 (Finding 7 row added; description NOT changed)
+
+| # | Prompt | Expected | Verdict | Judges |
+|---|--------|----------|---------|--------|
+| 1 | "our .claude folder is a mess, can you sort it out" | trigger | PASS | 3/3 trigger |
+| 2 | "we're about to start using Claude Code on this codebase, get it ready" | trigger | PASS | 3/3 trigger |
+| 3 | "the agent doesn't seem to have any scaffolding to work with here" | trigger | PASS | 3/3 trigger |
+| 4 | "review our whole Claude setup end to end" | trigger | PASS | 3/3 trigger |
+| 5 | "what do we still need to add before Claude can work well in this repo" | trigger | PASS | 3/3 trigger |
+| 6 | "our CLAUDE.md keeps contradicting itself" | no-trigger | PASS | 3/3 no-trigger |
+| 7 | "the CLAUDE.md file is unreadable, split it up" | no-trigger | PASS | 3/3 no-trigger |
+| 8 | "onboard this project, and audit whether CLAUDE.md needs work" | no-trigger | PASS | 3/3 no-trigger |
+| 9 | "should our onboarding docs mention Claude Code setup" | no-trigger | PASS | 3/3 no-trigger |
+| 10 | "are we CRA ready?" | no-trigger | PASS | 3/3 no-trigger |
+| 11 | "check if our CLAUDE.md is missing important policy sections" | no-trigger | PASS | 3/3 no-trigger |
+| 12 | "does our .claude setup meet CRA requirements for AI-assisted development?" (Finding 7) | no-trigger | PASS | 3/3 no-trigger |
+
+**12/12 PASS, unanimous, including row 12 — the Finding 7 row.** The predicted
+split did not materialize: all three judges on row 12 independently cited the
+description's existing, explicit compliance-domain carve-out ("a question about
+compliance readiness belongs to the compliance track... not here") and read the
+CRA vocabulary as controlling over the generic ".claude setup" phrasing, the
+same way row 10's judges did. **No description edit made** — the boundary fixed
+after round 4 (a general compliance-domain exclusion, not a carve-out of any one
+losing prompt) already generalized to this harder, blended case. This is
+recorded as a genuine finding that the boundary held, tested rather than
+assumed: the prediction was real, the row was run for real, and the result is
+reported as run, not rounded or skipped because it looked likely to pass.
+
 ## model-routing — round 2 (Finding 1 natural prompts; description NOT yet fixed)
 
 | # | Prompt | Expected | Verdict | Judges |
@@ -374,35 +425,37 @@ odds.
 
 ## Outcome
 
-**Final tally (using each skill's last round, including the adversarial-review
-follow-up): 51/51 rows PASS.** Zero FAIL. Zero FLAKY in the final state. (51, not
-50 — `harness-audit` gained row 11 from Finding 3.)
+**Final tally (using each skill's last round, including both adversarial-review
+follow-ups): 52/52 rows PASS.** Zero FAIL. Zero FLAKY in the final state. (52,
+not 51 — `harness-audit` gained row 12 from Finding 7.)
 
 Counting every judgement actually run across the whole file, including every
 discarded round — the honest total:
 
 | Skill | Rounds run | Rows × judges per round | PASS | FLAKY | FAIL |
 |---|---|---|---|---|---|
-| harness-audit | 5 (rounds 1–4 discarded, round 5 final) | 10×3=30 (rounds 1–3), 11×3=33 (rounds 4–5) | 9+9+10+10+11 = 49 | 1+1+0+1+0 = 3 | 0 |
-| claude-md-authoring | 1 (final, untouched by this follow-up) | 30 | 10 | 0 | 0 |
-| subagent-authoring | 1 (final, untouched by this follow-up) | 30 | 10 | 0 | 0 |
-| harness-eval | 1 (final, untouched by this follow-up) | 30 | 10 | 0 | 0 |
+| harness-audit | 6 (rounds 1–5 discarded, round 6 final) | 10×3=30 (rounds 1–3), 11×3=33 (rounds 4–5), 12×3=36 (round 6) | 9+9+10+10+11+12 = 61 | 1+1+0+1+0+0 = 3 | 0 |
+| claude-md-authoring | 1 (final, untouched by either follow-up) | 30 | 10 | 0 | 0 |
+| subagent-authoring | 1 (final, untouched by either follow-up) | 30 | 10 | 0 | 0 |
+| harness-eval | 1 (final, untouched by either follow-up) | 30 | 10 | 0 | 0 |
 | model-routing | 3 (round 1 discarded, round 2 discarded, round 3 final) | 30/round | 10+8+10 = 28 | 0+1+0 = 1 | 0+1+0 = 1 |
-| **Total** | — | **112 rows × 3 = 336 judgements** | **107 PASS rows** | **4 FLAKY rows** | **1 FAIL row** |
+| **Total** | — | **124 rows × 3 = 372 judgements** | **119 PASS rows** | **4 FLAKY rows** | **1 FAIL row** |
 
-Arithmetic check: 107 + 4 + 1 = 112 rows. 112 × 3 = 336 judgements. ✓
-Final-state rows (11 for harness-audit + 10 × 4 for the rest) = 51, all PASS.
-Discarded rows: harness-audit rounds 1–4 = 10+10+10+11 = 41 (38 PASS, 3 FLAKY);
+Arithmetic check: 119 + 4 + 1 = 124 rows. 124 × 3 = 372 judgements. ✓
+Final-state rows (12 for harness-audit + 10 × 4 for the rest) = 52, all PASS.
+Discarded rows: harness-audit rounds 1–5 = 10+10+10+11+11 = 52 (49 PASS, 3 FLAKY);
 model-routing rounds 1–2 = 10+10 = 20 (18 PASS, 1 FLAKY, 1 FAIL). Discarded total
-= 61 (56 PASS, 4 FLAKY, 1 FAIL). 51 + 61 = 112 ✓. 56+51 PASS = 107 ✓; 4 FLAKY ✓;
+= 72 (67 PASS, 4 FLAKY, 1 FAIL). 52 + 72 = 124 ✓. 67+52 PASS = 119 ✓; 4 FLAKY ✓;
 1 FAIL ✓.
 
-(The original run's own tally, before this follow-up, was 210 judgements across
-70 row-instances, 68 PASS / 2 FLAKY / 0 FAIL — that arithmetic still holds as the
-honest record of what had been run *at that point*; this section supersedes it as
-the current running total. The follow-up added 42 more row-instances — 22 for
-`harness-audit`, rounds 4–5; 20 for `model-routing`, rounds 2–3 — 42 × 3 = 126
-judgements, and 210 + 126 = 336 ✓.)
+(The original run's own tally, before the first follow-up, was 210 judgements
+across 70 row-instances, 68 PASS / 2 FLAKY / 0 FAIL — that arithmetic still holds
+as the honest record of what had been run *at that point*; this section
+supersedes it as the current running total. The first follow-up added 42 more
+row-instances — 22 for `harness-audit`, rounds 4–5; 20 for `model-routing`,
+rounds 2–3 — 42 × 3 = 126 judgements, and 210 + 126 = 336 ✓. The second follow-up
+(Finding 7) added 12 more row-instances — `harness-audit` round 6 — 12 × 3 = 36
+judgements, and 336 + 36 = 372 ✓.)
 
 - **3 description edits to `harness-audit`** total, all aimed at a boundary, not a
   losing row's literal wording:
@@ -418,6 +471,11 @@ judgements, and 210 + 126 = 336 ✓.)
      scaffolding, never the product's regulatory/compliance posture (GDPR, CRA,
      PLD, AI Act, EAA named as examples of the excluded domain) — closed the
      "are we CRA ready?" ambiguity found in round 4.
+- **0 description edits to `harness-audit` from Finding 7** (adversarial-review
+  follow-up 2): the blended ".claude setup" + "CRA requirements" prompt was
+  predicted to split the quorum, tested for real (round 6), and passed 3/3
+  unanimous without any change — edit 3 above already generalized to the
+  blended case. Recorded as a tested pass, not assumed.
 - **2 description edits to `model-routing`** (adversarial-review follow-up):
   1. Replaced all five near-verbatim trigger prompts with genuinely natural ones
      (Finding 1) — this is a spec edit, not a description edit, but it is what
@@ -521,6 +579,16 @@ hardening:
    this as a MUST with a verification step, the same way it now does for tools:
    pin the judge model explicitly on every dispatch and spot-check outputs for
    internal consistency, not just for a well-formed verdict word.
+
+**Addendum (third real use, Finding 7's follow-up, same date):** the 36
+dispatches for `harness-audit` round 6 (12 rows × 3 judges) used the same
+workaround as points 1–2 above — `general-purpose` with an explicit no-tool
+instruction, model pinned to `haiku` on every call — and every one of the 36
+returned `tool_uses: 0`. This entry is appended rather than folded into the
+"336 dispatches" claim above, which correctly described the run that existed
+at the time it was written; the workaround gap it names was still live for
+this third run too, since no zero-tool subagent type was added to this repo
+in between.
 
 This did not block execution — the workarounds are documented above and every
 dispatch was checked for `tool_uses: 0` and (after point 2's incident) a pinned
