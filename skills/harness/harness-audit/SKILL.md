@@ -1,15 +1,18 @@
 ---
 name: harness-audit
 description: >-
-  Audit, bootstrap or improve a repository's Claude Code harness — the CLAUDE.md,
-  skills, subagents, hooks, slash commands, MCP servers and verification gate that
-  coding agents run inside. Use when onboarding a repo to agentic development
-  ("set up Claude Code for this repo", "onboard this project", "get this repo
-  ready for Claude"), when harness quality is in question ("is our Claude setup
-  any good?", "audit our harness", "what's missing from our .claude directory?"),
-  or when an agent keeps underperforming in a repo and the cause may be missing or
-  rotten scaffolding rather than the task itself. Produces a present/gap/not-
-  applicable report — never a bare "looks good".
+  Audit, bootstrap or improve a repository's Claude Code harness as a whole — the
+  CLAUDE.md, skills, subagents, hooks, slash commands, MCP servers and
+  verification gate that coding agents run inside. Use when onboarding a repo to
+  agentic development ("set up Claude Code for this repo", "onboard this
+  project", "get this repo ready for Claude"), when the harness's overall
+  completeness or quality is in question ("is our Claude setup any good?",
+  "audit our harness", "what's missing from our .claude directory?"), or when an
+  agent keeps underperforming in a repo and the cause may be missing or rotten
+  scaffolding rather than the task itself. A complaint about one file's content or
+  length (e.g. "our CLAUDE.md is too long") is not a harness audit — that belongs
+  to CLAUDE.md authoring. Produces a present/gap/not-applicable report — never a
+  bare "looks good".
 ---
 
 # Harness Audit

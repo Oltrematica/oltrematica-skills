@@ -1,0 +1,64 @@
+{
+  "skills": [
+    {
+      "name": "harness-audit",
+      "prompts": [
+        {"prompt": "set up Claude Code for this repo", "expect": "trigger"},
+        {"prompt": "is our Claude setup any good?", "expect": "trigger"},
+        {"prompt": "what's missing from our .claude directory?", "expect": "trigger"},
+        {"prompt": "onboard this project to agentic development", "expect": "trigger"},
+        {"prompt": "audit our harness", "expect": "trigger"},
+        {"prompt": "our CLAUDE.md is too long", "expect": "no-trigger"},
+        {"prompt": "create an agent that reviews migrations", "expect": "no-trigger"},
+        {"prompt": "does this skill trigger?", "expect": "no-trigger"},
+        {"prompt": "prepare the release", "expect": "no-trigger"},
+        {"prompt": "fix the failing invoice test", "expect": "no-trigger"}
+      ]
+    },
+    {
+      "name": "claude-md-authoring",
+      "prompts": [
+        {"prompt": "write a CLAUDE.md for this repo", "expect": "trigger"},
+        {"prompt": "our CLAUDE.md is too long", "expect": "trigger"},
+        {"prompt": "the agent keeps forgetting to run the tests", "expect": "trigger"},
+        {"prompt": "why is Claude ignoring our conventions?", "expect": "trigger"},
+        {"prompt": "add this rule to CLAUDE.md", "expect": "trigger"},
+        {"prompt": "audit our harness", "expect": "no-trigger"},
+        {"prompt": "should this be a skill or a command?", "expect": "no-trigger"},
+        {"prompt": "test my skill's description", "expect": "no-trigger"},
+        {"prompt": "why did we choose Redis for queues?", "expect": "no-trigger"},
+        {"prompt": "update the README badges", "expect": "no-trigger"}
+      ]
+    },
+    {
+      "name": "subagent-authoring",
+      "prompts": [
+        {"prompt": "create an agent that reviews migrations", "expect": "trigger"},
+        {"prompt": "should this be a skill or a command?", "expect": "trigger"},
+        {"prompt": "I want a subagent for research", "expect": "trigger"},
+        {"prompt": "make this run automatically every time", "expect": "trigger"},
+        {"prompt": "add a /deploy command", "expect": "trigger"},
+        {"prompt": "write a CLAUDE.md for this repo", "expect": "no-trigger"},
+        {"prompt": "is our Claude setup any good?", "expect": "no-trigger"},
+        {"prompt": "the skill fires on everything", "expect": "no-trigger"},
+        {"prompt": "generate an SBOM for v2.1", "expect": "no-trigger"},
+        {"prompt": "refactor UserController into a service class", "expect": "no-trigger"}
+      ]
+    },
+    {
+      "name": "harness-eval",
+      "prompts": [
+        {"prompt": "does this skill trigger?", "expect": "trigger"},
+        {"prompt": "test my skill's description", "expect": "trigger"},
+        {"prompt": "the skill fires on everything", "expect": "trigger"},
+        {"prompt": "why didn't Claude use the skill?", "expect": "trigger"},
+        {"prompt": "did that CLAUDE.md change actually work?", "expect": "trigger"},
+        {"prompt": "write a CLAUDE.md for this repo", "expect": "no-trigger"},
+        {"prompt": "create an agent that reviews migrations", "expect": "no-trigger"},
+        {"prompt": "set up Claude Code for this repo", "expect": "no-trigger"},
+        {"prompt": "are we CRA ready?", "expect": "no-trigger"},
+        {"prompt": "write a migration for the orders table", "expect": "no-trigger"}
+      ]
+    }
+  ]
+}
