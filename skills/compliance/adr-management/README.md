@@ -31,16 +31,16 @@ repo. Install it in one of two scopes:
 ### Per project (shared with the team via git)
 
 ```bash
-cp -R skills/adr-management /path/to/your-project/.claude/skills/adr-management
+cp -R skills/compliance/adr-management /path/to/your-project/.claude/skills/adr-management
 ```
 
 ### For your user account (available in every project)
 
 ```bash
-cp -R skills/adr-management ~/.claude/skills/adr-management
+cp -R skills/compliance/adr-management ~/.claude/skills/adr-management
 ```
 
-See [`docs/distribution.md`](../../docs/distribution.md) for submodule and
+See [`docs/distribution.md`](../../../docs/distribution.md) for submodule and
 plugin options.
 
 ### Verify
@@ -61,4 +61,4 @@ You can also trigger it directly: "document this decision", "why did we choose X
 ## License
 
 Proprietary — Copyright © 2026 Oltrematica. All rights reserved. See the
-repository [LICENSE](../../LICENSE).
+repository [LICENSE](../../../LICENSE).
