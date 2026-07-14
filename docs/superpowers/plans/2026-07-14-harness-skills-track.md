@@ -1878,7 +1878,8 @@ spec in git rather than in a chat log.
 - Produces:
   - `eval_run.py --validate <spec.json>` → exit 0 if valid, 2 with reasons if not.
   - `eval_run.py --emit-table <spec.json>` → markdown results table on stdout,
-    `Expected` filled, `Result` blank for Claude to fill.
+    `Expected` filled, `Verdict` and `Judges` blank for Claude to fill from the
+    quorum's votes.
   - Spec format: `{"skills": [{"name": str, "prompts": [{"prompt": str, "expect": "trigger"|"no-trigger"}]}], "regressions": [{"prompt": str, "expect_observable": str}]}`
 
 - [ ] **Step 1: Write the failing test**
@@ -1933,8 +1934,8 @@ check "no traceback" "no" "$(echo "$ERR" | grep -q "Traceback" && echo yes || ec
 echo "5. --emit-table renders a markdown table"
 OUT=$(python3 "$EVAL" --emit-table "$SPEC" 2>/dev/null)
 check "exit 0" "0" "$?"
-check "has a table header" "yes" "$(echo "$OUT" | grep -q '| # | Prompt | Expected | Result |' && echo yes || echo no)"
-check "Result column left blank for Claude" "yes" "$(echo "$OUT" | grep -qE '\| *\|$' && echo yes || echo no)"
+check "has a table header" "yes" "$(echo "$OUT" | grep -q '| # | Prompt | Expected | Verdict | Judges |' && echo yes || echo no)"
+check "Verdict/Judges columns left blank for Claude" "yes" "$(echo "$OUT" | grep -qE '\| *\| *\|$' && echo yes || echo no)"
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"
@@ -2089,11 +2090,11 @@ def emit_table(spec):
     for skill in spec["skills"]:
         out.append(f"## {skill['name']}")
         out.append("")
-        out.append("| # | Prompt | Expected | Result |")
-        out.append("|---|--------|----------|--------|")
+        out.append("| # | Prompt | Expected | Verdict | Judges |")
+        out.append("|---|--------|----------|---------|--------|")
         for n, entry in enumerate(skill["prompts"], start=1):
             prompt = entry["prompt"].replace("|", "\\|")
-            out.append(f"| {n} | \"{prompt}\" | {entry['expect']} | |")
+            out.append(f"| {n} | \"{prompt}\" | {entry['expect']} | | |")
         out.append("")
 
     regressions = spec.get("regressions", [])
@@ -2227,27 +2228,52 @@ anything:
 scripts/eval_run.py --validate .claude/eval_spec.json
 ```
 
-### 2. Run each prompt in a fresh, blind subagent
+### 2. Judge each prompt with a quorum of fresh, blind subagents
 
-Dispatch one subagent per prompt. Each is given the skill's `description:` text
-and the prompt, and asked exactly one thing:
+Dispatch **three independent subagents per prompt** — a quorum, not a judge. Each
+is given the skill's `description:` text and the prompt, and asked exactly one
+thing:
 
 > Given ONLY this skill description and this user prompt, would this skill be
 > invoked? Answer `trigger` or `no-trigger`, then one sentence of reasoning.
 > Judge the description alone — you have no access to the skill body.
 
-Fresh subagents matter. Asking yourself, in the context where you just *wrote* the
-description, produces a graded exam marked by its own author. You know what you
-meant; the router will not.
+Two things make this adversarial rather than decorative:
 
-### 3. Tabulate
+**Fresh.** Asking yourself, in the context where you just *wrote* the description,
+produces a graded exam marked by its own author. You know what you meant; the
+router will not.
+
+**Plural.** Triggering is a probabilistic decision, so a single judge returns one
+sample and calls it evidence. Three judges can *disagree* — and disagreement is not
+noise to be averaged away, it is the finding. A prompt that two judges fire on and
+one does not is exactly what a flaky trigger looks like from the outside. One judge
+cannot see that. It reports a clean PASS and you ship a coin flip.
+
+### 3. Tabulate — record the split, never round it
 
 ```bash
 scripts/eval_run.py --emit-table .claude/eval_spec.json
 ```
 
-Fill the `Result` column: `PASS` / `FAIL`, each with the one-line reasoning. Write
-the table to `tests/<track>/trigger-validation.md`, or to the repo's equivalent.
+Fill in two columns:
+
+- **Judges** — the raw vote, e.g. `3/3 trigger` or `2/3 trigger`.
+- **Verdict** — one of exactly three values:
+
+| Verdict | When | Meaning |
+|---------|------|---------|
+| `PASS` | Unanimous, and matches `Expected` | The description behaves as intended |
+| `FAIL` | Unanimous, and contradicts `Expected` | The description is wrong. Fix it |
+| `FLAKY` | Judges split, whichever way the majority went | **Not a pass.** The description is ambiguous on this prompt |
+
+**A split is a finding, not a rounding error.** Never convert `2/3 trigger` into
+`PASS` because the majority agreed with you. A clause the judges cannot read
+consistently is a clause the router will not apply consistently, and it will fail
+on the day it matters. Find the ambiguous phrase and sharpen it until the quorum is
+unanimous.
+
+Write the table to `tests/<track>/trigger-validation.md`, or the repo's equivalent.
 
 ### 4. Interpret
 
@@ -2256,6 +2282,7 @@ the table to `tests/<track>/trigger-validation.md`, or to the repo's equivalent.
 | Trigger prompts fail | Under-triggering. The description is abstract, or written in your vocabulary rather than the user's | Add concrete example phrasings **in the user's words** |
 | No-trigger prompts fire | Over-triggering. A clause is too broad — usually one that opens with a category rather than an example | Anchor the clause with specific examples; narrow the category |
 | A neighbor's prompts fire | Cross-triggering | Sharpen the boundary in *both* descriptions, then re-run *both* specs |
+| **Judges split (`FLAKY`)** | **Ambiguity.** Some clause is readable two ways, and each judge picked one | Find the phrase they disagreed *about* — their one-line reasonings will name it — and make it say one thing |
 | Everything passes first try | Suspect the spec, not the skill | Your prompts are probably paraphrases of the description. Add prompts you expect to fail |
 
 A description edit invalidates every previous result. Re-run the whole spec — not
@@ -2275,20 +2302,39 @@ harness *works*. For that: pin the behavior, change the harness, compare.
 3. **Change the harness.** One change. Two changes at once and you learn nothing
    about either.
 4. **Run after.** Same prompts, fresh subagents, same recording.
-5. **Diff and report.** State plainly what improved, what regressed, and what did
-   not move. **A change that moves nothing is a finding**, and a valuable one: it
-   is how you learn that the paragraph you just added to CLAUDE.md is dead weight
-   competing for attention with the rules that work.
+5. **Try to refute the improvement.** This is the step everyone skips, and it is the
+   one that keeps you honest. Before you report that the change helped, dispatch a
+   skeptic whose job is to argue it did not:
+
+   > Here is the before transcript, the after transcript, and the change that was
+   > made. Argue that the change is NOT responsible for the difference. Consider:
+   > run-to-run variance, a prompt that was always going to succeed, a difference
+   > that does not actually satisfy `expect_observable`. Default to "not
+   > established" if the evidence is thin.
+
+   You are the change's author, and you will read its transcript generously. The
+   skeptic will not. If it can explain the improvement without reference to your
+   change, you have not shown anything yet — run more samples or accept the null
+   result.
+6. **Diff and report.** State plainly what improved, what regressed, and what did
+   not move — including what the skeptic could not rule out. **A change that moves
+   nothing is a finding**, and a valuable one: it is how you learn that the
+   paragraph you just added to CLAUDE.md is dead weight, competing for attention
+   with the rules that work.
 
 ## Honesty rules
 
-- **Small N.** Ten prompts is not a benchmark. Say so. This is a smoke test that
-  catches gross triggering failures, and it is worth doing precisely because the
-  alternative is zero evidence — not because it is rigorous.
-- **Non-determinism is real.** A prompt that fires four times in five is a finding,
-  not a PASS. Record it as flaky and investigate the clause responsible.
-- **Never mark a skill "validated".** Report the rows. The human reads the table
-  and decides.
+- **Small N.** Ten prompts × three judges is not a benchmark. Say so. This is a
+  smoke test that catches gross triggering failures, and it is worth doing precisely
+  because the alternative is zero evidence — not because it is rigorous.
+- **A quorum reduces the error; it does not remove it.** Three judges who all read
+  the same ambiguous clause the same way still tell you nothing about the fourth
+  reader. Unanimity is evidence, not proof.
+- **Never average away a disagreement.** `2/3` is `FLAKY`, not `PASS`. The moment
+  you start rounding splits in your favor, the whole exercise becomes theatre with
+  a table attached.
+- **Never mark a skill "validated".** Report the rows and the splits. The human
+  reads the table and decides.
 ```
 
 - [ ] **Step 7: Verify house rules and self-consistency**
@@ -2445,18 +2491,31 @@ head -20 /tmp/trigger-table.md
 Expected: `OK: ... is a valid eval spec`, then a four-section markdown table with
 `Result` blank.
 
-- [ ] **Step 3: Judge every row with fresh, blind subagents**
+- [ ] **Step 3: Judge every row with a quorum of fresh, blind subagents**
 
 Follow `harness-eval` Mode 1 step 2 literally — this is the dog-food test of the
-skill itself. For each of the 40 rows, dispatch a subagent with **only** the
-skill's `description:` text and the prompt:
+skill itself, and the first real use of its adversarial quorum. For each of the 40
+rows, dispatch **three independent** subagents, each seeing **only** the skill's
+`description:` text and the prompt:
 
 > Given ONLY this skill description and this user prompt, would this skill be
 > invoked? Answer `trigger` or `no-trigger`, then one sentence of reasoning. You
 > have no access to the skill body — judge the description alone.
 
-Dispatch the 40 in parallel batches. Do **not** judge them yourself: you wrote the
-descriptions, and you will mark your own homework generously.
+That is 120 judgements. Dispatch them in parallel batches.
+
+Record each row as the skill prescribes: **Judges** = the raw vote (`3/3 trigger`,
+`2/3 no-trigger`, …), **Verdict** = `PASS` (unanimous, matches expectation), `FAIL`
+(unanimous, contradicts it), or `FLAKY` (**split, whichever way the majority went**).
+
+Two rules you will be tempted to break, and must not:
+
+- **Do not judge any row yourself.** You wrote these descriptions. You will mark
+  your own homework generously and you will not notice you are doing it.
+- **Do not round a `2/3` into a `PASS`.** A split means the description is ambiguous
+  on that prompt. Record it as `FLAKY` and treat it as a defect to fix, exactly as
+  you would a `FAIL`. If the skill's own first real run quietly rounds away its
+  splits, the skill is a lie and every table it ever produces is worthless.
 
 - [ ] **Step 4: Write the results file**
 
@@ -2484,13 +2543,21 @@ Paste the filled tables. In **Outcome**, be honest: if a row failed, say which
 description was edited and re-run *that skill's whole spec* (a description edit
 invalidates every previous row for that skill, per the skill's own rule).
 
-- [ ] **Step 5: Fix any failing description and re-run**
+- [ ] **Step 5: Fix any FAIL or FLAKY description and re-run**
 
-If any row FAILs, edit that skill's `description:` per `harness-eval`'s
-interpretation table (Mode 1 step 4), then repeat Steps 3–4 **for that entire
-skill**, not just the failing row. Record both passes in the Outcome section — the
-first result and the fix are the interesting part of the evidence, not an
-embarrassment to hide.
+A `FLAKY` row is a defect, not a near-miss — treat it exactly as you would a `FAIL`.
+Edit that skill's `description:` per `harness-eval`'s interpretation table (Mode 1
+step 4): a `FAIL` means a clause is wrong; a `FLAKY` means a clause is ambiguous,
+and the judges' reasonings will usually name the phrase they read differently.
+
+Then repeat Steps 3–4 **for that entire skill** — all 30 judgements — not just the
+offending row. A description edit invalidates every previous result for that skill.
+
+Record both rounds in the Outcome section. The first result and the fix are the
+most interesting evidence in the file, not an embarrassment to bury: a table that
+shows a description was ambiguous and got sharpened is proof the method works. A
+table where everything passed on the first try mostly proves the prompts were too
+easy.
 
 - [ ] **Step 6: Commit**
 

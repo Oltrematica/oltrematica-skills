@@ -143,14 +143,25 @@ trigger surface, tool allowlist under least privilege (a research agent gets no
 The differentiator. Two modes:
 
 **Trigger validation.** Given a skill, generate N positive and N negative
-prompts, dispatch each to a fresh subagent that reports only *did skill X fire*,
-tabulate. Catches misses **and** over-triggering. Generalizes the hand-written
-`tests/trigger-validation.md` table into something runnable.
+prompts, then judge each with an **adversarial quorum**: three independent fresh
+subagents, each seeing only the `description:` and the prompt, reporting *did skill
+X fire*. Catches misses **and** over-triggering — and, because the judges can
+disagree, catches the failure a single judge structurally cannot see: **ambiguity**.
+A split vote is recorded as `FLAKY`, never rounded up to `PASS`. Generalizes the
+hand-written `tests/trigger-validation.md` table into something runnable.
 
 **Behavioral regression.** Pin a small set of task prompts plus expected
-observable outcomes for the repo; run before and after a harness change; diff.
-This is how a CLAUDE.md edit is proven to have helped rather than felt to have
-helped.
+observable outcomes for the repo; run before and after a harness change; diff. Then
+dispatch a **skeptic** to argue the change is *not* responsible for the difference
+(run-to-run variance, a prompt that would have passed anyway). An improvement the
+skeptic can explain away has not been demonstrated. This is how a CLAUDE.md edit is
+proven to have helped rather than felt to have helped.
+
+**Why adversarial, and why here.** Both modes ask a model to grade work a model
+produced — the classic setup for confident, self-flattering evidence. A single judge
+returns one sample of a probabilistic decision and calls it a result. A quorum can
+disagree, and the disagreement is the signal: it is what a flaky trigger looks like
+from outside. (Decision D-6.)
 
 Ships `scripts/eval_run.sh` and `assets/eval_spec.yaml`, so the prompt set lives
 in git rather than in a chat log.
@@ -210,6 +221,7 @@ Two PRs, not one.
 | D-3 | Four skills, not one workflow-based mega-skill | Binding architecture principle: one skill = one capability |
 | D-4 | No hooks / MCP / skill-authoring skills | Already covered by `update-config`, out of scope, and Superpowers `writing-skills` respectively |
 | D-5 | `harness-eval` ships a git-tracked eval spec | An eval that lives in a chat log is not an eval |
+| D-6 | Adversarial verification lives *inside* `harness-eval`, not in a new skill | A standalone `adversarial-review` skill would collide with `superpowers:requesting-code-review` and the built-in `/code-review` — the duplication D-1 forbids. The place adversarial verification is genuinely load-bearing is where a model grades a model: a trigger quorum that can disagree, and a skeptic that tries to refute a claimed improvement. Added 2026-07-14 on Andrea's prompt |
 
 ## 10. Open questions
 
