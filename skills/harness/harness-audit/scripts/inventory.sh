@@ -72,6 +72,39 @@ except Exception:
 PY
 }
 
+# "true"/"false": whether <path> contains <heading> as a heading — i.e. a
+# line whose content, once trailing/leading whitespace is stripped, equals
+# <heading> exactly — outside any fenced code block (``` or ~~~). This is
+# deliberately not a full markdown parser: it does not handle 4-space
+# indented code blocks, HTML comments, or a heading resurrected by an
+# unbalanced/unterminated fence. Missing/unreadable file, or any error -> "false".
+heading_present_unfenced() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+path, heading = sys.argv[1], sys.argv[2]
+try:
+    with open(path, encoding='utf-8', errors='replace') as f:
+        lines = f.readlines()
+except OSError:
+    print('false')
+    sys.exit()
+
+in_fence = False
+declared = False
+for raw in lines:
+    marker = raw.strip()
+    if marker.startswith('```') or marker.startswith('~~~'):
+        in_fence = not in_fence
+        continue
+    if in_fence:
+        continue
+    if marker == heading:
+        declared = True
+        break
+print('true' if declared else 'false')
+PY
+}
+
 # "true"/"false": whether <file> parses as JSON and has a top-level
 # "scripts"."test" key (npm/composer convention). Never raises.
 has_scripts_test() {
@@ -100,14 +133,18 @@ else
 fi
 
 # --- Surface 8: model routing policy ---
-# Facts only: does CLAUDE.md contain the stable, greppable heading that
+# Facts only: does CLAUDE.md contain the stable heading that
 # skills/harness/model-routing/assets/claude_md_snippet.md ships as its
-# paste-in block? This never judges whether the policy is good, complete or
-# needed — that classification is the skill's job, not the script's.
+# paste-in block, used AS AN ACTUAL HEADING — its own line, anchored (not a
+# substring mid-sentence), and outside a fenced code block (so a CLAUDE.md
+# that only QUOTES the snippet as an example inside ``` fences does not read
+# as an adopted policy)? This never judges whether the policy is good,
+# complete or needed — that classification is the skill's job, not the
+# script's.
 MODEL_ROUTING_HEADING='## Model routing policy (this repo)'
 POLICY_DECLARED=false
-if [ -f "$CLAUDE_MD" ] && [ -r "$CLAUDE_MD" ] && grep -qF "$MODEL_ROUTING_HEADING" "$CLAUDE_MD" 2>/dev/null; then
-  POLICY_DECLARED=true
+if [ -f "$CLAUDE_MD" ] && [ -r "$CLAUDE_MD" ]; then
+  POLICY_DECLARED=$(heading_present_unfenced "$CLAUDE_MD" "$MODEL_ROUTING_HEADING")
 fi
 
 # --- Surfaces 2, 3, 5: skills, agents, commands ---

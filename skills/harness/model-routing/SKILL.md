@@ -8,8 +8,13 @@ description: >-
   limit?", "this is burning through my usage", "we hit the limit before the 5
   hours were up", "how do I make Claude Code cheaper", "which model should I
   use for this?", "can we use a cheaper model for this task", "should this run
-  on Opus or Haiku?", "is fast mode cheaper?"). Explains the real cost
-  mechanism — context length times turns, not prompt count — and gives a
+  on Opus or Haiku?", "is fast mode cheaper?"). This also covers the same
+  complaint described indirectly, without naming "usage", "limit", "cost" or
+  "model" at all — a session that abruptly stops, goes quiet, or "dies"
+  partway through a task (the felt experience of hitting the limit, not the
+  vocabulary for it), or a report that a colleague's session runs noticeably
+  longer than the user's own before the same thing happens to them. Explains
+  the real cost mechanism — context length times turns, not prompt count — and gives a
   routing table from task shape to model tier, plus the counter-rule that a
   cheap model taking extra turns can cost more than a capable one. Does not
   cover how to write a subagent file, or the skill/subagent/command/hook

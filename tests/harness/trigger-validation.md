@@ -18,9 +18,13 @@ vs. `model-routing` on "model tier"). Judge model: Claude Haiku, dispatched via 
 dispatch prompt (see "Notes on the harness-eval procedure" at the end — this
 harness has no subagent type with a genuinely empty tool list).
 
-**210 total judgements** across 70 row-instances: 50 final rows (5 skills × 10
-prompts) plus 20 superseded rows from `harness-audit`'s two earlier rounds (10
-rows × 2 discarded rounds), all at 3 judges/row = 70 × 3 = 210.
+**336 total judgements** across 112 row-instances, after the adversarial-review
+follow-up documented later in this file (Findings 1–3): 51 final rows (11 for
+`harness-audit`, 10 each for the other four skills) plus 61 superseded rows from
+`harness-audit`'s four discarded rounds and `model-routing`'s two discarded
+rounds, all at 3 judges/row = 112 × 3 = 336. See "## Outcome" at the end of this
+file for the full reconciliation; the figure was 210 judgements / 70 row-instances
+before the follow-up ran.
 
 ## harness-audit — round 1 (original description, before this task's boundary fix)
 
@@ -175,7 +179,7 @@ materialize, because the fix was made before the quorum ran, not after a split.*
 
 **10/10 PASS, all unanimous. No description edit needed.**
 
-## model-routing (unchanged description — new skill from Task 13)
+## model-routing — round 1 (original prompts — SUPERSEDED, see correction below)
 
 | # | Prompt | Expected | Verdict | Judges |
 |---|--------|----------|---------|--------|
@@ -191,80 +195,290 @@ materialize, because the fix was made before the quorum ran, not after a split.*
 | 10 | "does this skill trigger?" | no-trigger | PASS | 3/3 no-trigger |
 
 **10/10 PASS, all unanimous, including row 4 — the Finding H boundary row, proven
-from `model-routing`'s side too. No description edit needed.**
+from `model-routing`'s side too. No description edit needed at the time.**
+
+**CORRECTION (adversarial-review follow-up, same date): this round's clean sweep
+was not the evidence it looked like.** Rows 1–3 above are one- or two-word edits
+of the description's own bracketed examples — "why do I keep hitting the limit?"
+against the description's "...the usage limit?"; "this is burning my usage"
+against "...burning through my usage"; "can we use a cheaper model for this?"
+against "...for this task". That is a verbatim-quote pass, which `harness-eval`'s
+own Mode 1 names explicitly as proving nothing about under-triggering ("Verbatim
+phrasings the description itself quotes — these must pass, and if they do not,
+the description is broken outright" is a different, weaker claim than "the
+description generalizes"). The "Honesty check on the clean sweeps" section below
+originally claimed every trigger-row prompt across all three clean-sweep skills
+was "a natural paraphrase, not a verbatim quote" — that claim was **false** for
+this round. It has been corrected there. Rows 1–3 (and, for a fair test, all five
+trigger rows) were replaced with genuinely natural phrasings and the full spec was
+re-run — see "model-routing — round 2" and "round 3" below. This round's rows are
+kept here, unmodified, as the honest record of what was actually run and why it
+was insufficient — not deleted, per this file's own rule that softness gets
+recorded, not erased.
+
+## Adversarial-review follow-up (Findings 1–3, same date)
+
+A review of the run above surfaced three findings. Two required re-running
+trigger validation; one (Finding 2) touched only `inventory.sh` and its own
+contract test, with no trigger-validation row affected.
+
+**Finding 2 (fact, not a judged row):** `inventory.sh`'s Surface 8 detection used
+an unanchored `grep -qF` for the model-routing policy heading, so a CLAUDE.md that
+merely *quoted* the heading inside a fenced code block, or mid-sentence, was
+reported as `policy_declared: true` for a repo that had adopted no such policy.
+Fixed with a line-anchored, fence-aware python check (`heading_present_unfenced`
+in `inventory.sh`) — a line must equal the heading exactly and not be inside a
+` ``` `/`~~~` fence to count. Contract tests added to `inventory.sh.test`: heading
+present normally → true (pre-existing); heading absent → false (pre-existing);
+heading present ONLY inside a code fence → false (new); heading present
+mid-sentence, not as a heading → false (new). The architectural line — the script
+reports facts, never judges whether a policy is adopted well or needed — is
+unchanged; only the *fact-finding* got more precise. No trigger-validation row
+touches this: it is a detector bug, not a description problem.
+
+**Finding 1:** `model-routing`'s original trigger rows 1–3 were near-verbatim
+quotes of its own description (documented as a correction above, and in the
+"Honesty check on the clean sweeps" correction). Fixed by replacing all five
+trigger prompts with phrasings that appear nowhere in the description — none of
+the five contain the words "model", "usage" or "limit" at all, exceeding the
+"at least two" bar. Re-run below as rounds 2 and 3.
+
+**Finding 3:** `harness-audit`'s boundary rule (harness scaffolding vs. content
+judgement) had never been tested against a genuine content-vs-completeness
+ambiguity: "check if our CLAUDE.md is missing important policy sections." Added
+as row 11, `expect: no-trigger`, reasoning from the stated boundary rule (a
+judgement about whether CLAUDE.md's *content* is adequate is a content judgement
+→ `claude-md-authoring` territory) — not pre-judged as a guaranteed pass. Re-run
+below as part of rounds 4 and 5.
+
+All judges in this follow-up were dispatched on the `haiku` model, one prompt per
+judge, zero tools, per Mode 1 (an earlier internal dispatch batch accidentally
+omitted the model pin and was discarded before any result was used or recorded —
+it produced confused, self-contradictory reasoning and is not counted anywhere in
+this file's tallies).
+
+## harness-audit — round 4 (Finding 3 row added; description NOT yet fixed for CRA)
+
+| # | Prompt | Expected | Verdict | Judges |
+|---|--------|----------|---------|--------|
+| 1 | "our .claude folder is a mess, can you sort it out" | trigger | PASS | 3/3 trigger |
+| 2 | "we're about to start using Claude Code on this codebase, get it ready" | trigger | PASS | 3/3 trigger |
+| 3 | "the agent doesn't seem to have any scaffolding to work with here" | trigger | PASS | 3/3 trigger |
+| 4 | "review our whole Claude setup end to end" | trigger | PASS | 3/3 trigger |
+| 5 | "what do we still need to add before Claude can work well in this repo" | trigger | PASS | 3/3 trigger |
+| 6 | "our CLAUDE.md keeps contradicting itself" | no-trigger | PASS | 3/3 no-trigger |
+| 7 | "the CLAUDE.md file is unreadable, split it up" | no-trigger | PASS | 3/3 no-trigger |
+| 8 | "onboard this project, and audit whether CLAUDE.md needs work" | no-trigger | PASS | 3/3 no-trigger |
+| 9 | "should our onboarding docs mention Claude Code setup" | no-trigger | PASS | 3/3 no-trigger |
+| 10 | "are we CRA ready?" | no-trigger | **FLAKY** | 2/3 no-trigger |
+| 11 | "check if our CLAUDE.md is missing important policy sections" (Finding 3) | no-trigger | PASS | 3/3 no-trigger |
+
+Row 10 dissent: the dissenting judge read "is our Claude setup any good?" (an
+in-scope example phrase) and "are we CRA ready?" as the same kind of readiness
+question, reasoning *"asks about the overall completeness and readiness of the
+Claude Code harness for a compliance requirement (CRA), which directly matches
+the skill's stated use case."* That conflates the harness's own readiness with
+the product's regulatory compliance posture — a genuine, if narrow, ambiguity:
+nothing in the description said the two are different. **10/11 PASS, 1/11 FLAKY —
+not rounded to PASS.** Row 11 (Finding 3) passed 3/3 clean on its first run,
+including from this round's judges who had not seen the CRA boundary fix yet —
+the compliance-vs-scaffolding boundary the fix below addresses is specifically
+about *domain* (CRA/GDPR/etc. readiness) not *file* (CLAUDE.md content), so row
+11 was never expected to interact with it.
+
+## Fix applied to harness-audit (after round 4)
+
+Added one sentence to the description stating a general principle: "readiness"
+and "completeness" in this skill's scope are always about the Claude Code
+harness's own scaffolding, never about the product's regulatory or business
+compliance posture (naming GDPR, CRA, PLD, AI Act, EAA as examples of that
+domain, not as an exhaustive carve-out list aimed at the losing prompt), even
+when a request echoes this skill's own vocabulary ("ready", "audit"). This
+states a boundary between two domains, not an exception for the single word
+"CRA" — the same shape of fix as the earlier CLAUDE.md-content boundary rule.
+
+## harness-audit — round 5 (after CRA/compliance-domain boundary fix, full spec re-run)
+
+| # | Prompt | Expected | Verdict | Judges |
+|---|--------|----------|---------|--------|
+| 1 | "our .claude folder is a mess, can you sort it out" | trigger | PASS | 3/3 trigger |
+| 2 | "we're about to start using Claude Code on this codebase, get it ready" | trigger | PASS | 3/3 trigger |
+| 3 | "the agent doesn't seem to have any scaffolding to work with here" | trigger | PASS | 3/3 trigger |
+| 4 | "review our whole Claude setup end to end" | trigger | PASS | 3/3 trigger |
+| 5 | "what do we still need to add before Claude can work well in this repo" | trigger | PASS | 3/3 trigger |
+| 6 | "our CLAUDE.md keeps contradicting itself" | no-trigger | PASS | 3/3 no-trigger |
+| 7 | "the CLAUDE.md file is unreadable, split it up" | no-trigger | PASS | 3/3 no-trigger |
+| 8 | "onboard this project, and audit whether CLAUDE.md needs work" | no-trigger | PASS | 3/3 no-trigger |
+| 9 | "should our onboarding docs mention Claude Code setup" | no-trigger | PASS | 3/3 no-trigger |
+| 10 | "are we CRA ready?" | no-trigger | PASS | 3/3 no-trigger |
+| 11 | "check if our CLAUDE.md is missing important policy sections" | no-trigger | PASS | 3/3 no-trigger |
+
+**11/11 PASS, unanimous, including row 10 (fixed) and row 11 (the Finding 3 row,
+which the quorum decided belongs to `claude-md-authoring`, not here — proven, not
+pre-judged).**
+
+## model-routing — round 2 (Finding 1 natural prompts; description NOT yet fixed)
+
+| # | Prompt | Expected | Verdict | Judges |
+|---|--------|----------|---------|--------|
+| 1 | "why do I always run dry by mid-afternoon?" | trigger | PASS | 3/3 trigger |
+| 2 | "my session just died on me again, right in the middle of everything" | trigger | **FAIL** | 3/3 no-trigger |
+| 3 | "everything in here feels so slow and expensive lately" | trigger | PASS | 3/3 trigger |
+| 4 | "would something smaller cut it for this kind of grunt work?" | trigger | PASS | 3/3 trigger |
+| 5 | "how come Marco's session outlasts mine every single time?" | trigger | **FLAKY** | 2/3 trigger |
+| 6 | "create an agent that reviews migrations" | no-trigger | PASS | 3/3 no-trigger |
+| 7 | "our CLAUDE.md is too long" | no-trigger | PASS | 3/3 no-trigger |
+| 8 | "prepare the release" | no-trigger | PASS | 3/3 no-trigger |
+| 9 | "audit our harness" | no-trigger | PASS | 3/3 no-trigger |
+| 10 | "does this skill trigger?" | no-trigger | PASS | 3/3 no-trigger |
+
+**This is exactly what Finding 1 predicted would happen if the spec were made
+honest: real under-triggering surfaced.** Row 2 FAILED unanimously — all three
+judges read "my session just died" as a technical crash report, not a
+usage-limit symptom (one judge: *"reporting a session crash or stability issue,
+not raising concerns about cost, model tier selection, or usage allowance
+limits"*). Row 5 split 2/3 trigger — the dissenting judge required explicit
+cost/usage/model vocabulary and read a bare session-length comparison as
+insufficient. **8/10 PASS, 1/10 FLAKY, 1/10 FAIL — not rounded, not discarded.**
+
+## Fix applied to model-routing (after round 2)
+
+Added a sentence to the description naming the *category* these two rows belong
+to, not their literal wording: a session that abruptly stops, goes quiet, or
+"dies" partway through a task is the felt experience of hitting the limit, even
+when the words "usage", "limit", "cost" or "model" never appear; and a report
+that a colleague's session runs longer is the same complaint by comparison. This
+targets the underlying symptom-vocabulary gap the two failures shared, not a
+carve-out quoting "my session just died on me again" or "Marco" verbatim.
+
+## model-routing — round 3 (after symptom/comparative-complaint fix, full spec re-run)
+
+| # | Prompt | Expected | Verdict | Judges |
+|---|--------|----------|---------|--------|
+| 1 | "why do I always run dry by mid-afternoon?" | trigger | PASS | 3/3 trigger |
+| 2 | "my session just died on me again, right in the middle of everything" | trigger | PASS | 3/3 trigger |
+| 3 | "everything in here feels so slow and expensive lately" | trigger | PASS | 3/3 trigger |
+| 4 | "would something smaller cut it for this kind of grunt work?" | trigger | PASS | 3/3 trigger |
+| 5 | "how come Marco's session outlasts mine every single time?" | trigger | PASS | 3/3 trigger |
+| 6 | "create an agent that reviews migrations" | no-trigger | PASS | 3/3 no-trigger |
+| 7 | "our CLAUDE.md is too long" | no-trigger | PASS | 3/3 no-trigger |
+| 8 | "prepare the release" | no-trigger | PASS | 3/3 no-trigger |
+| 9 | "audit our harness" | no-trigger | PASS | 3/3 no-trigger |
+| 10 | "does this skill trigger?" | no-trigger | PASS | 3/3 no-trigger |
+
+**10/10 PASS, unanimous, including both previously-failing rows.** All three
+judges on row 2 explicitly cited the new "felt experience of hitting the limit"
+language; all three on row 5 cited the new comparative-complaint clause — the
+signal that the fix closed the actual vocabulary gap rather than shifting the
+odds.
 
 ## Outcome
 
-**Final tally (using each skill's last round): 50/50 rows PASS.** Zero FAIL. Zero
-FLAKY in the final state.
+**Final tally (using each skill's last round, including the adversarial-review
+follow-up): 51/51 rows PASS.** Zero FAIL. Zero FLAKY in the final state. (51, not
+50 — `harness-audit` gained row 11 from Finding 3.)
 
-Counting every judgement actually run, including discarded rounds — the honest
-total:
+Counting every judgement actually run across the whole file, including every
+discarded round — the honest total:
 
 | Skill | Rounds run | Rows × judges per round | PASS | FLAKY | FAIL |
 |---|---|---|---|---|---|
-| harness-audit | 3 (round 1 discarded, round 2 discarded, round 3 final) | 10 × 3 = 30/round | 9 + 9 + 10 = 28 | 1 + 1 + 0 = 2 | 0 |
-| claude-md-authoring | 1 | 30 | 10 | 0 | 0 |
-| subagent-authoring | 1 | 30 | 10 | 0 | 0 |
-| harness-eval | 1 | 30 | 10 | 0 | 0 |
-| model-routing | 1 | 30 | 10 | 0 | 0 |
-| **Total** | — | **70 rows × 3 = 210 judgements** | **68 PASS rows** | **2 FLAKY rows** | **0 FAIL rows** |
+| harness-audit | 5 (rounds 1–4 discarded, round 5 final) | 10×3=30 (rounds 1–3), 11×3=33 (rounds 4–5) | 9+9+10+10+11 = 49 | 1+1+0+1+0 = 3 | 0 |
+| claude-md-authoring | 1 (final, untouched by this follow-up) | 30 | 10 | 0 | 0 |
+| subagent-authoring | 1 (final, untouched by this follow-up) | 30 | 10 | 0 | 0 |
+| harness-eval | 1 (final, untouched by this follow-up) | 30 | 10 | 0 | 0 |
+| model-routing | 3 (round 1 discarded, round 2 discarded, round 3 final) | 30/round | 10+8+10 = 28 | 0+1+0 = 1 | 0+1+0 = 1 |
+| **Total** | — | **112 rows × 3 = 336 judgements** | **107 PASS rows** | **4 FLAKY rows** | **1 FAIL row** |
 
-Arithmetic check: 68 + 2 + 0 = 70 rows. 70 × 3 = 210 judgements. 68 + 2 = 70 ✓.
-Final-state rows (10 × 5 skills) = 50, all PASS. Discarded rows from
-`harness-audit`'s two earlier rounds = 20 (10 × 2), of which 18 PASS and 2 FLAKY.
-50 + 20 = 70 ✓.
+Arithmetic check: 107 + 4 + 1 = 112 rows. 112 × 3 = 336 judgements. ✓
+Final-state rows (11 for harness-audit + 10 × 4 for the rest) = 51, all PASS.
+Discarded rows: harness-audit rounds 1–4 = 10+10+10+11 = 41 (38 PASS, 3 FLAKY);
+model-routing rounds 1–2 = 10+10 = 20 (18 PASS, 1 FLAKY, 1 FAIL). Discarded total
+= 61 (56 PASS, 4 FLAKY, 1 FAIL). 51 + 61 = 112 ✓. 56+51 PASS = 107 ✓; 4 FLAKY ✓;
+1 FAIL ✓.
 
-- **2 description edits, both to `harness-audit`**, both aimed at the boundary with
-  `claude-md-authoring`, not at the losing row's literal wording:
+(The original run's own tally, before this follow-up, was 210 judgements across
+70 row-instances, 68 PASS / 2 FLAKY / 0 FAIL — that arithmetic still holds as the
+honest record of what had been run *at that point*; this section supersedes it as
+the current running total. The follow-up added 42 more row-instances — 22 for
+`harness-audit`, rounds 4–5; 20 for `model-routing`, rounds 2–3 — 42 × 3 = 126
+judgements, and 210 + 126 = 336 ✓.)
+
+- **3 description edits to `harness-audit`** total, all aimed at a boundary, not a
+  losing row's literal wording:
   1. General compositional rule: a CLAUDE.md content judgement excludes the whole
      request even when paired with onboarding vocabulary — fixed a genuine
      ambiguity but introduced a new one (which way a compound request resolves
      was unstated).
   2. Same clause, made directional: the exclusion governs the entire request, full
-     stop, no partial trigger. This is what actually closed the ambiguity —
-     confirmed by three fresh judges independently citing the same phrase in
-     their reasoning.
+     stop, no partial trigger. This closed that ambiguity — confirmed by three
+     fresh judges independently citing the same phrase in their reasoning.
+  3. (Adversarial-review follow-up) A second, independent boundary: "readiness"
+     and "completeness" in this skill's scope are about the harness's own
+     scaffolding, never the product's regulatory/compliance posture (GDPR, CRA,
+     PLD, AI Act, EAA named as examples of the excluded domain) — closed the
+     "are we CRA ready?" ambiguity found in round 4.
+- **2 description edits to `model-routing`** (adversarial-review follow-up):
+  1. Replaced all five near-verbatim trigger prompts with genuinely natural ones
+     (Finding 1) — this is a spec edit, not a description edit, but it is what
+     surfaced the two real defects below.
+  2. Added the "felt experience of hitting the limit" / comparative-complaint
+     category to the description after round 2's genuine FAIL and FLAKY — closed
+     both in round 3 without quoting either losing prompt verbatim.
 - **1 description edit, pre-emptive, to `subagent-authoring`** (Finding H): removed
   the "model tier" claim before running any judges, because the collision with
   `model-routing` was predicted at spec-design time, not discovered by a split.
   The predicted row (row 8) passed 3/3 clean on the only run — evidence the
   pre-emptive fix was sufficient, though with only one run there is no
   before/after contrast the way `harness-audit`'s fixes have.
-- **claude-md-authoring, harness-eval, model-routing**: zero edits, 10/10
-  unanimous on the only run each. Per this skill's own honesty rule ("everything
-  passes first try → suspect the spec, not the skill"), a clean sweep on three of
-  five skills is not claimed as unqualified success — see the honesty note below.
+- **claude-md-authoring, harness-eval**: zero edits, 10/10 unanimous on the only
+  run each, and untouched by this follow-up. `model-routing`'s earlier "zero
+  edits, clean sweep" claim is retired — its honest history is a real FAIL, a
+  real FLAKY, and a fix that closed both; see the correction under "model-routing
+  — round 1" and the "Honesty check on the clean sweeps" section above.
 - **No row was rounded.** Every "3/3" above is a genuine unanimous vote from three
   separately dispatched, blind subagents that saw only the `description:` text and
-  one prompt each — never the skill body, never the other 9 prompts for that
-  skill, never the expected answer, never each other's votes. Both FLAKY rows
-  (harness-audit round 1 and round 2, row 8) are recorded as FLAKY, not rounded
-  toward the majority, even though round 2's majority happened to agree with
-  `Expected`.
+  one prompt each — never the skill body, never the other prompts for that skill,
+  never the expected answer, never each other's votes. All four FLAKY rows
+  (`harness-audit` round 1 row 8, round 2 row 8, round 4 row 10; `model-routing`
+  round 2 row 5) and the one FAIL row (`model-routing` round 2 row 2) are recorded
+  as such, not rounded toward the majority or discarded quietly.
 - **This report does not mark any skill "validated."** These are the raw rows; a
   human should read them and decide.
 
 ### Honesty check on the clean sweeps
 
-Three of five skills (`claude-md-authoring`, `harness-eval`, `model-routing`)
-passed 10/10 unanimous on the only run, with no edit. Per Mode 1's own
-interpretation table ("Everything passes first try → Suspect the spec, not the
-skill"), this is not claimed as proof those three descriptions are bulletproof.
-Mitigating factors, stated plainly rather than assumed:
-- Every trigger-row prompt in all three specs was deliberately written as a
-  natural paraphrase, not a verbatim quote of the description's own bracketed
-  examples (Finding C) — so the clean sweep is not the "trivial pass" antipattern
-  the interpretation table warns about.
-- Each of the three specs' no-trigger sets includes at least one prompt from
-  every other harness skill's territory and one from the compliance track
+**CORRECTED (adversarial-review follow-up): this section originally claimed all
+three of `claude-md-authoring`, `harness-eval` and `model-routing` used natural
+paraphrase trigger prompts. That was true for the first two and false for
+`model-routing` — see the correction under "model-routing — round 1" above.**
+`model-routing`'s original rows 1–3 were near-verbatim quotes of its own
+description, which is exactly the "trivial pass" antipattern Mode 1 warns about,
+not evidence its description generalizes. The claim below is now scoped to the
+two skills it actually holds for.
+
+Two of five skills (`claude-md-authoring`, `harness-eval`) passed 10/10 unanimous
+on the only run, with no edit. Per Mode 1's own interpretation table ("Everything
+passes first try → Suspect the spec, not the skill"), this is not claimed as proof
+those two descriptions are bulletproof. Mitigating factors, stated plainly rather
+than assumed:
+- Every trigger-row prompt in both specs was deliberately written as a natural
+  paraphrase, not a verbatim quote of the description's own bracketed examples
+  (Finding C) — so the clean sweep is not the "trivial pass" antipattern the
+  interpretation table warns about.
+- Each spec's no-trigger set includes at least one prompt from every other
+  harness skill's territory and one from the compliance track
   (`adr-management`/`cra-evidence`) — the neighbor-collision surface that
-  actually bit `harness-audit` was exercised for all three, and none produced
-  even a single dissenting vote.
+  actually bit `harness-audit` was exercised for both, and none produced even a
+  single dissenting vote.
 - Still: 3 judges × 10 prompts is a smoke test, not a benchmark (Mode 1's own
   "Small N" rule). A fourth reader, or a prompt this spec did not think to try,
   could still disagree. Unanimity here is evidence that the obvious neighbor
   collisions are clean, not proof the descriptions are complete.
+
+`model-routing`'s own clean-sweep claim is retired; its honest status is in
+"model-routing — round 3" below, which used genuinely natural prompts and did
+surface real under-triggering before it passed.
 
 ## Notes on the harness-eval procedure itself (second real use)
 
@@ -282,7 +496,7 @@ hardening:
    environment, and no locally-defined zero-tool agent type in this repo's
    `.claude/agents/`. Every judge in this run was dispatched via `general-purpose`
    (tools: `*`) with an explicit "do NOT use any tool" instruction in the prompt
-   text, and none of the 210 dispatches show any `tool_uses` other than 0 in their
+   text, and none of the 336 dispatches show any `tool_uses` other than 0 in their
    returned usage metadata — so no judge actually exercised a tool. But this is a
    prompt-level convention enforced by inspection after the fact, not a structural
    guarantee enforced before dispatch, and it is the same workaround the prior
@@ -293,6 +507,22 @@ hardening:
    0` in every returned result before trusting it") rather than stating the
    requirement and leaving the mechanism to be reinvented per run.
 
-This did not block execution — the workaround is documented above and every
-dispatch was checked for `tool_uses: 0` — but a third team running this without
-having read two prior reports would rediscover the same gap.
+2. **"Use a cheap model for judges" has the same gap: a stated requirement with no
+   enforced mechanism.** During the adversarial-review follow-up, an initial batch
+   of 33 `harness-audit` judges was dispatched without pinning `model: "haiku"` on
+   the subagent call, defaulting to a far more capable model. The result was not a
+   loud failure — it silently produced confused, self-contradictory verdicts (e.g.
+   a judge writing "no-trigger... so it triggers" in the same answer), which is a
+   worse failure mode than an error, because a table would still have filled in if
+   it had not been inspected by eye before use. The batch was discarded and
+   entirely re-run with `model: "haiku"` explicit on every dispatch (see the
+   correction note under "Adversarial-review follow-up" above); none of those
+   discarded 33 judgements appear in any tally in this file. Mode 1 should state
+   this as a MUST with a verification step, the same way it now does for tools:
+   pin the judge model explicitly on every dispatch and spot-check outputs for
+   internal consistency, not just for a well-formed verdict word.
+
+This did not block execution — the workarounds are documented above and every
+dispatch was checked for `tool_uses: 0` and (after point 2's incident) a pinned
+`haiku` model — but a third team running this without having read prior reports
+would rediscover the same gaps.

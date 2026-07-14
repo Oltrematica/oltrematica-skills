@@ -103,6 +103,35 @@ check "exit code 0" "0" "$RC7"
 check "policy_declared false when heading absent" "False" \
   "$(printf '%s' "$OUT7" | python3 -c "import json,sys; print(json.load(sys.stdin)['model_routing']['policy_declared'])")"
 
+echo "model_routing: heading present ONLY inside a code fence reports false"
+T8=$(mktemp -d); TMP_ROOTS+=("$T8")
+cat > "$T8/CLAUDE.md" <<'MD'
+# CLAUDE.md
+
+Example snippet a new adopter could paste in:
+
+```
+## Model routing policy (this repo)
+- Mechanical, fully-specified edits: cheapest tier is mandatory, not optional
+```
+
+We have not adopted this yet — it's just quoted here as a reference.
+MD
+OUT8=$(bash "$INV" "$T8" 2>/dev/null); RC8=$?
+check "exit code 0" "0" "$RC8"
+check "stdout is valid JSON" "yes" "$(valid_json "$OUT8")"
+check "policy_declared false when heading is only inside a code fence" "False" \
+  "$(printf '%s' "$OUT8" | python3 -c "import json,sys; print(json.load(sys.stdin)['model_routing']['policy_declared'])")"
+
+echo "model_routing: heading present mid-sentence, not as a heading, reports false"
+T9=$(mktemp -d); TMP_ROOTS+=("$T9")
+printf '# CLAUDE.md\n\nSee the section titled ## Model routing policy (this repo) for the template.\n' > "$T9/CLAUDE.md"
+OUT9=$(bash "$INV" "$T9" 2>/dev/null); RC9=$?
+check "exit code 0" "0" "$RC9"
+check "stdout is valid JSON" "yes" "$(valid_json "$OUT9")"
+check "policy_declared false when heading appears mid-sentence, not as a heading" "False" \
+  "$(printf '%s' "$OUT9" | python3 -c "import json,sys; print(json.load(sys.stdin)['model_routing']['policy_declared'])")"
+
 echo "robustness: missing python3 fails loudly, not with a stack trace"
 FAKEBIN=$(mktemp -d); TMP_ROOTS+=("$FAKEBIN")
 for tool in bash grep wc tr cat mkdir rm printf test; do

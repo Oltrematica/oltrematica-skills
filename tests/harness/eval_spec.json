@@ -12,7 +12,8 @@
         {"prompt": "the CLAUDE.md file is unreadable, split it up", "expect": "no-trigger"},
         {"prompt": "onboard this project, and audit whether CLAUDE.md needs work", "expect": "no-trigger"},
         {"prompt": "should our onboarding docs mention Claude Code setup", "expect": "no-trigger"},
-        {"prompt": "are we CRA ready?", "expect": "no-trigger"}
+        {"prompt": "are we CRA ready?", "expect": "no-trigger"},
+        {"prompt": "check if our CLAUDE.md is missing important policy sections", "expect": "no-trigger"}
       ]
     },
     {
@@ -63,11 +64,11 @@
     {
       "name": "model-routing",
       "prompts": [
-        {"prompt": "why do I keep hitting the limit?", "expect": "trigger"},
-        {"prompt": "this is burning my usage", "expect": "trigger"},
-        {"prompt": "can we use a cheaper model for this?", "expect": "trigger"},
-        {"prompt": "what model tier should my review subagent run on?", "expect": "trigger"},
-        {"prompt": "do we really need Opus for a one-line rename", "expect": "trigger"},
+        {"prompt": "why do I always run dry by mid-afternoon?", "expect": "trigger"},
+        {"prompt": "my session just died on me again, right in the middle of everything", "expect": "trigger"},
+        {"prompt": "everything in here feels so slow and expensive lately", "expect": "trigger"},
+        {"prompt": "would something smaller cut it for this kind of grunt work?", "expect": "trigger"},
+        {"prompt": "how come Marco's session outlasts mine every single time?", "expect": "trigger"},
         {"prompt": "create an agent that reviews migrations", "expect": "no-trigger"},
         {"prompt": "our CLAUDE.md is too long", "expect": "no-trigger"},
         {"prompt": "prepare the release", "expect": "no-trigger"},

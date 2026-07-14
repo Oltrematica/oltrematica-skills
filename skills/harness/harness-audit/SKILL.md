@@ -18,8 +18,13 @@ description: >-
   thing to CLAUDE.md authoring — it is not a partial trigger, and matching the
   onboarding vocabulary elsewhere in the sentence does not override the exclusion.
   A judgement about one file itself (CLAUDE.md above all) is CLAUDE.md authoring's
-  territory, full stop. Produces a present/gap/not-applicable report — never a bare
-  "looks good".
+  territory, full stop. "Readiness" and "completeness" here are always about the
+  Claude Code harness's own scaffolding — never about the product's regulatory or
+  business compliance posture (GDPR, CRA, PLD, AI Act, EAA, or any other
+  compliance domain), even when a request uses words like "ready" or "audit" that
+  echo this skill's own vocabulary: a question about compliance readiness belongs
+  to the compliance track (e.g. `cra-evidence`), not here. Produces a
+  present/gap/not-applicable report — never a bare "looks good".
 ---
 
 # Harness Audit
