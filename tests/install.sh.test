@@ -87,7 +87,9 @@ rm -rf "$GLOB_TARGET"
 
 echo "10. skill name ambiguous across tracks fails loudly and names both tracks"
 HARNESS_FIXTURE="$REPO_ROOT/skills/harness/adr-management"
-cleanup_fixture() { rm -rf "$REPO_ROOT/skills/harness"; }
+# skills/harness/ may already contain real, committed skills (e.g. harness-audit) —
+# only remove the fixture subdirectory we create here, never the whole track dir.
+cleanup_fixture() { rm -rf "$HARNESS_FIXTURE"; }
 trap 'cleanup_fixture; rm -rf "$TARGET"' EXIT
 mkdir -p "$HARNESS_FIXTURE"
 echo "# fixture" > "$HARNESS_FIXTURE/SKILL.md"

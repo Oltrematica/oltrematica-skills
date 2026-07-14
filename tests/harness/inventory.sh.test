@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Contract test for harness-audit/scripts/inventory.sh against the bad-harness fixture.
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+INV="$REPO_ROOT/skills/harness/harness-audit/scripts/inventory.sh"
+FIXTURE="$REPO_ROOT/tests/harness/fixtures/bad-harness"
+PASS=0; FAIL=0
+check() {
+  if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1))
+  else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi
+}
+
+OUT=$(bash "$INV" "$FIXTURE" 2>/dev/null); RC=$?
+check "exit code 0 on a valid repo" "0" "$RC"
+check "stdout is valid JSON" "yes" \
+  "$(printf '%s' "$OUT" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null && echo yes || echo no)"
+
+q() { printf '%s' "$OUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
+
+check "all seven surfaces reported" "yes" \
+  "$(q "'yes' if sorted(d) == sorted(['claude_md','skills','agents','hooks','commands','mcp','verify_gate']) else sorted(d)")"
+check "D1: CLAUDE.md found and over 200 lines" "True" "$(q "d['claude_md']['exists'] and d['claude_md']['lines'] > 200")"
+check "D2: no agents"        "0"     "$(q "len(d['agents'])")"
+check "D3: no hooks"         "False" "$(q "d['hooks']['configured']")"
+check "D4: no verify gate"   "False" "$(q "d['verify_gate']['detected']")"
+check "D5: the bad skill is inventoried" "True" "$(q "'do-everything' in d['skills']")"
+
+echo "error path: non-existent repo root"
+bash "$INV" /no/such/path >/dev/null 2>&1
+check "exit code 1" "1" "$?"
+
+# --- Robustness: the script runs against arbitrary, possibly messy repos. ---
+# Every case below must (a) not crash and (b) always emit parseable JSON.
+TMP_ROOTS=()
+cleanup_tmp_roots() { for d in "${TMP_ROOTS[@]:-}"; do [ -n "$d" ] && rm -rf "$d"; done; }
+trap cleanup_tmp_roots EXIT
+
+valid_json() {
+  printf '%s' "$1" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null && echo yes || echo no
+}
+
+echo "robustness: malformed composer.json does not crash and stays valid JSON"
+T1=$(mktemp -d); TMP_ROOTS+=("$T1")
+printf '{ "scripts": { "test": ' > "$T1/composer.json"   # truncated/invalid JSON
+OUT1=$(bash "$INV" "$T1" 2>/dev/null); RC1=$?
+check "exit code 0" "0" "$RC1"
+check "stdout is valid JSON" "yes" "$(valid_json "$OUT1")"
+check "verify_gate not detected from a malformed file" "False" \
+  "$(printf '%s' "$OUT1" | python3 -c "import json,sys; print(json.load(sys.stdin)['verify_gate']['detected'])")"
+
+echo "robustness: malformed .claude/settings.json does not crash and stays valid JSON"
+T2=$(mktemp -d); TMP_ROOTS+=("$T2")
+mkdir -p "$T2/.claude"
+printf '{ this is not json' > "$T2/.claude/settings.json"
+OUT2=$(bash "$INV" "$T2" 2>/dev/null); RC2=$?
+check "exit code 0" "0" "$RC2"
+check "stdout is valid JSON" "yes" "$(valid_json "$OUT2")"
+check "settings file detected as present" "True" \
+  "$(printf '%s' "$OUT2" | python3 -c "import json,sys; print(json.load(sys.stdin)['hooks']['settings_file'])")"
+check "hooks not configured from a malformed file" "False" \
+  "$(printf '%s' "$OUT2" | python3 -c "import json,sys; print(json.load(sys.stdin)['hooks']['configured'])")"
+
+echo "robustness: repo path containing a space, a single quote and a double quote"
+T3=$(mktemp -d); TMP_ROOTS+=("$T3")
+WEIRD="$T3/my 'weird\" repo"
+mkdir -p "$WEIRD"
+printf '# CLAUDE\n' > "$WEIRD/CLAUDE.md"
+OUT3=$(bash "$INV" "$WEIRD" 2>/dev/null); RC3=$?
+check "exit code 0" "0" "$RC3"
+check "stdout is valid JSON" "yes" "$(valid_json "$OUT3")"
+check "CLAUDE.md still detected under the odd path" "True" \
+  "$(printf '%s' "$OUT3" | python3 -c "import json,sys; print(json.load(sys.stdin)['claude_md']['exists'])")"
+
+echo "robustness: unreadable CLAUDE.md degrades to not-present, not a crash"
+T4=$(mktemp -d); TMP_ROOTS+=("$T4")
+printf 'secret policy\n' > "$T4/CLAUDE.md"
+chmod 000 "$T4/CLAUDE.md"
+OUT4=$(bash "$INV" "$T4" 2>/dev/null); RC4=$?
+check "exit code 0" "0" "$RC4"
+check "stdout is valid JSON" "yes" "$(valid_json "$OUT4")"
+chmod 644 "$T4/CLAUDE.md"
+
+echo "robustness: missing python3 fails loudly, not with a stack trace"
+FAKEBIN=$(mktemp -d); TMP_ROOTS+=("$FAKEBIN")
+for tool in bash grep wc tr cat mkdir rm printf test; do
+  p=$(command -v "$tool" 2>/dev/null)
+  [ -n "$p" ] && ln -s "$p" "$FAKEBIN/$tool"
+done
+T5=$(mktemp -d); TMP_ROOTS+=("$T5")
+ERR5=$(env -i PATH="$FAKEBIN" "$FAKEBIN/bash" "$INV" "$T5" 2>&1 >/dev/null); RC5=$?
+check "exit code 127" "127" "$RC5"
+check "stderr names python3, no traceback" "yes" \
+  "$(printf '%s' "$ERR5" | grep -qi python3 && ! printf '%s' "$ERR5" | grep -qi traceback && echo yes || echo no)"
+
+cleanup_tmp_roots
+trap - EXIT
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
