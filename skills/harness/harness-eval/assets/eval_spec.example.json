@@ -1,0 +1,26 @@
+{
+  "$comment": "Eval spec. Copy to <repo>/.claude/eval_spec.json and edit. JSON, not YAML: python3 stdlib has json and not yaml, and this repo adds no dependencies.",
+  "skills": [
+    {
+      "name": "do-everything",
+      "prompts": [
+        {"prompt": "add a controller for invoices", "expect": "no-trigger"},
+        {"prompt": "what is the capital of France?", "expect": "no-trigger"},
+        {"prompt": "rename this variable", "expect": "no-trigger"},
+        {"prompt": "explain this stack trace", "expect": "no-trigger"},
+        {"prompt": "update the changelog", "expect": "no-trigger"},
+        {"prompt": "do everything", "expect": "trigger"},
+        {"prompt": "use the do-everything skill", "expect": "trigger"},
+        {"prompt": "run the do-everything workflow", "expect": "trigger"},
+        {"prompt": "invoke do-everything on this repo", "expect": "trigger"},
+        {"prompt": "do-everything, please", "expect": "trigger"}
+      ]
+    }
+  ],
+  "regressions": [
+    {
+      "prompt": "add a controller for invoices",
+      "expect_observable": "The agent does NOT invoke do-everything, and runs the repo's declared test command before claiming completion."
+    }
+  ]
+}

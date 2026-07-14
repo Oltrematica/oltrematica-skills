@@ -173,3 +173,91 @@ SKILL.md is 135 lines, under the 500-line ceiling; hooks handed off to
 `update-config` (never hand-edited); least-privilege tool guidance present
 (`Read, Grep, Glob, Bash` — no `Write`/`Edit` — for research/review agents).
 `assets/agent_template.md` matches the brief's template exactly.
+
+## 2026-07-14 — eval_run.py
+
+**Step 2: RED** — `skills/harness/harness-eval/scripts/eval_run.py` did not
+exist yet: `PASS=4 FAIL=6`, exit 1 (python3 itself produced exit 2 for the
+missing/thin/dupe/unreadable cases by accident of `python3: can't open file`,
+which is why 4 checks passed before any implementation existed — the table and
+5/5-minimum/duplicate-naming checks correctly failed, since there was nothing
+to produce that output). ✓ confirmed red for the right reason.
+
+**Step 5: GREEN** — after writing `eval_run.py` per the brief, with the
+`sys.exit(2)` correction applied to both `load()` branches (see deviation
+note below):
+
+| # | Test | Result |
+|---|------|--------|
+| 1 | Shipped example spec validates | ✓ exit 0 |
+| 2 | Under-5-prompts spec rejected, explains the minimum | ✓ exit 2 |
+| 3 | Duplicate prompts rejected by name | ✓ exit 2 |
+| 4 | Missing spec file → exit 2, no traceback | ✓ |
+| 5 | `--emit-table` renders a markdown table with a blank Verdict/Judges column | ✓ |
+
+`PASS=10 FAIL=0` — matches the brief's stated expectation exactly.
+
+**Summary**: eval_run.py does the deterministic half only — spec validation and
+table rendering. It deliberately does NOT judge whether a skill fired; that is the
+model's job via fresh subagents (SKILL.md Mode 1 step 2). A script that pretended
+to judge would produce confident, wrong evidence.
+
+Deviation from the design spec: the eval spec is **JSON, not YAML**. python3 stdlib
+has `json` and not `yaml`; YAML would require PyYAML, and this repo adds no
+dependencies.
+
+**Bug in the brief, fixed per the brief's own instructions**: the brief's
+initial `load()` draft used `sys.exit(f"ERROR: ...")` for both the
+`FileNotFoundError` and `JSONDecodeError` branches, which prints to stderr and
+exits **1** — but the brief's own contract test (case 4) asserts exit **2** for
+a missing spec. Implemented per the brief's correction: both branches now do
+`print(..., file=sys.stderr); sys.exit(2)` explicitly.
+
+**Robustness beyond the brief** — `eval_run.py` reads arbitrary user-authored
+JSON, so `tests/harness/eval_run.py.test` was extended with 13 additional
+cases (26 checks) covering shapes the brief's four cases don't exercise. None
+may produce a traceback; all must produce an actionable stderr message and
+exit 2 (or, where the input is actually fine, must not corrupt the table):
+
+| # | Case | Why it's dangerous if unhandled |
+|---|------|----------------------------------|
+| 6 | Spec is JSON `null` | `spec.get(...)` on `None` → `AttributeError` traceback |
+| 7 | Spec is a bare JSON list | `spec.get(...)` on a `list` → `AttributeError` traceback |
+| 8 | `"skills"` is a string, not a list | Already guarded by the brief's `isinstance` check; confirmed no crash |
+| 9 | A `skills[i]` entry is not an object (e.g. a string) | `skill.get("name")` on a `str` → `AttributeError` traceback |
+| 10 | `"prompts"` key missing entirely | Already guarded (`isinstance(prompts, list)` is `False` for `None`); confirmed |
+| 11 | `"expect"` misspelled (`"triggered"`) | Confirmed rejected by name, not silently coerced to `trigger`/`no-trigger` |
+| 12 | Empty `"prompt"` string | Confirmed caught (falsy-string check), distinct from a missing key |
+| 13 | A prompt containing a literal `\|` | Would corrupt the markdown table's column count — confirmed escaped (`\\|`) and the table still has exactly 10 data rows, not 11+ from a split cell |
+| 14 | Unicode in a prompt (accents, CJK, emoji) | Confirmed no crash and the text round-trips unmangled through `--emit-table` |
+| 15 | `"regressions"` present but not a list | Original brief code iterated `spec.get("regressions", [])` directly; if it were a string, `entry.get(...)` on a `str` character → `AttributeError` traceback. Added an explicit `isinstance` guard |
+| 16 | Spec path is a directory | `open()` raises `IsADirectoryError`, an `OSError` subclass not caught by the brief's `FileNotFoundError`/`JSONDecodeError` pair → traceback. Added a dedicated branch, ordered before a general `OSError` catch-all also added for the same reason (e.g. permission errors) |
+
+All 16 cases (36 checks total, the brief's original 10 plus these 26) pass:
+`PASS=36 FAIL=0`. Code changes made to survive these cases, beyond the brief's
+listing: `validate()` now type-checks `spec` itself, every `skills[i]`, every
+prompt entry, and `regressions` before calling `.get()` on any of them;
+`load()` gained an `IsADirectoryError` branch and a general `(OSError,
+UnicodeDecodeError)` branch (opened with explicit `encoding="utf-8"`); `main()`
+wraps `validate()` and `emit_table()` in a narrow last-resort `except
+Exception` that prints an actionable message and exits 2 rather than letting
+any missed case surface a traceback — defense in depth, not a substitute for
+the type-checks above.
+
+**Self-consistency**: `assets/eval_spec.example.json` targets
+`tests/harness/fixtures/bad-harness`'s D5 defect (`do-everything` skill) with 5
+trigger + 5 no-trigger prompts and one `regressions` entry, and validates
+against the script's own 5/5 minimum:
+`python3 skills/harness/harness-eval/scripts/eval_run.py --validate
+skills/harness/harness-eval/assets/eval_spec.example.json` → `OK: ... is a
+valid eval spec`. The fixture itself was not modified.
+
+SKILL.md is 166 lines, under the 500-line ceiling; frontmatter well-formed.
+Handoff check: `harness-audit` and `claude-md-authoring` both route "a skill's
+description over- or under-triggers" to `harness-eval` by name;
+`subagent-authoring` routes "a proper trigger check" here. All three land on
+Mode 1 (trigger validation), which this SKILL.md delivers as an executable
+procedure — quorum of 3 fresh, blind subagents per prompt, a 3-value verdict
+(`PASS`/`FAIL`/`FLAKY`) with splits never rounded up, plus Mode 2 (behavioral
+regression with an adversarial skeptic subagent) for the CLAUDE.md-change use
+case the other three skills don't cover.

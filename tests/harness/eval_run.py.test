@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# Contract test for harness-eval/scripts/eval_run.py
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+EVAL="$REPO_ROOT/skills/harness/harness-eval/scripts/eval_run.py"
+SPEC="$REPO_ROOT/skills/harness/harness-eval/assets/eval_spec.example.json"
+PASS=0; FAIL=0
+check() {
+  if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1))
+  else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi
+}
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+
+echo "1. the shipped example spec is valid"
+python3 "$EVAL" --validate "$SPEC" >/dev/null 2>&1
+check "exit 0" "0" "$?"
+
+echo "2. a spec with too few prompts is rejected"
+cat > "$TMP/thin.json" <<'JSON'
+{"skills": [{"name": "thin", "prompts": [
+  {"prompt": "a", "expect": "trigger"},
+  {"prompt": "b", "expect": "no-trigger"}
+]}]}
+JSON
+ERR=$(python3 "$EVAL" --validate "$TMP/thin.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "explains the 5/5 minimum" "yes" "$(echo "$ERR" | grep -qi "5" && echo yes || echo no)"
+
+echo "3. duplicate prompts are rejected"
+python3 - "$TMP/dupe.json" <<'PY'
+import json, sys
+p = [{"prompt": "same", "expect": "trigger"}] * 5 + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "dupe", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/dupe.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "names the duplicate" "yes" "$(echo "$ERR" | grep -qi "duplicate" && echo yes || echo no)"
+
+echo "4. an unreadable spec fails cleanly, without a traceback"
+ERR=$(python3 "$EVAL" --validate /no/such/spec.json 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(echo "$ERR" | grep -q "Traceback" && echo yes || echo no)"
+
+echo "5. --emit-table renders a markdown table"
+OUT=$(python3 "$EVAL" --emit-table "$SPEC" 2>/dev/null)
+check "exit 0" "0" "$?"
+check "has a table header" "yes" "$(echo "$OUT" | grep -q '| # | Prompt | Expected | Verdict | Judges |' && echo yes || echo no)"
+check "Verdict/Judges columns left blank for Claude" "yes" "$(echo "$OUT" | grep -qE '\| *\| *\|$' && echo yes || echo no)"
+
+# --- Robustness: the spec is user-authored JSON. Every shape below must be
+# rejected with an actionable stderr message and exit 2 — never a traceback,
+# and never a silent misinterpretation. ---
+no_traceback() { echo "$1" | grep -q "Traceback" && echo yes || echo no; }
+
+echo "6. a spec that is JSON null"
+echo 'null' > "$TMP/null.json"
+ERR=$(python3 "$EVAL" --validate "$TMP/null.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo "7. a spec that is a bare JSON list"
+echo '[1, 2, 3]' > "$TMP/barelist.json"
+ERR=$(python3 "$EVAL" --validate "$TMP/barelist.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo "8. 'skills' is not a list"
+echo '{"skills": "nope"}' > "$TMP/skills-not-list.json"
+ERR=$(python3 "$EVAL" --validate "$TMP/skills-not-list.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo "9. a skill entry is not an object"
+python3 - "$TMP/skill-not-obj.json" <<'PY'
+import json, sys
+json.dump({"skills": ["not-an-object"]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/skill-not-obj.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo "10. 'prompts' key is missing entirely"
+python3 - "$TMP/no-prompts.json" <<'PY'
+import json, sys
+json.dump({"skills": [{"name": "noprompts"}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/no-prompts.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo "11. 'expect' is misspelled"
+python3 - "$TMP/bad-expect.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(5)] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(4)] + \
+    [{"prompt": "neg 4", "expect": "triggered"}]
+json.dump({"skills": [{"name": "bad-expect", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/bad-expect.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+check "names the bad value" "yes" "$(echo "$ERR" | grep -qi "triggered" && echo yes || echo no)"
+
+echo "12. an entry has an empty prompt string"
+python3 - "$TMP/empty-prompt.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(5)] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(4)] + \
+    [{"prompt": "", "expect": "no-trigger"}]
+json.dump({"skills": [{"name": "empty-prompt", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/empty-prompt.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo "13. a prompt containing a pipe character does not corrupt the table"
+python3 - "$TMP/pipe.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(4)] + \
+    [{"prompt": "run a | b | c pipeline", "expect": "trigger"}] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "pipe", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+python3 "$EVAL" --validate "$TMP/pipe.json" >/dev/null 2>&1
+check "pipe spec still validates" "0" "$?"
+OUT=$(python3 "$EVAL" --emit-table "$TMP/pipe.json" 2>&1); RC=$?
+check "exit 0" "0" "$RC"
+check "pipe is escaped, not raw" "yes" "$(echo "$OUT" | grep -q 'a \\| b \\| c pipeline' && echo yes || echo no)"
+ROWS=$(echo "$OUT" | grep -cE '^\| [0-9]+ \|')
+check "exactly 10 data rows (pipe did not split a row)" "10" "$ROWS"
+
+echo "14. unicode prompts round-trip without a crash"
+python3 - "$TMP/unicode.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(4)] + \
+    [{"prompt": "façon de faire — 你好 — emoji 🚀 review", "expect": "trigger"}] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "unicode", "prompts": p}]}, open(sys.argv[1], "w"), ensure_ascii=False)
+PY
+python3 "$EVAL" --validate "$TMP/unicode.json" >/dev/null 2>&1
+check "unicode spec validates" "0" "$?"
+OUT=$(python3 "$EVAL" --emit-table "$TMP/unicode.json" 2>&1); RC=$?
+check "exit 0" "0" "$RC"
+check "unicode text preserved" "yes" "$(echo "$OUT" | grep -q '你好' && echo yes || echo no)"
+
+echo "15. 'regressions' is not a list"
+python3 - "$TMP/bad-regressions.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(5)] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "ok", "prompts": p}], "regressions": "nope"}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/bad-regressions.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo "16. spec path is a directory, not a file"
+mkdir -p "$TMP/adir"
+ERR=$(python3 "$EVAL" --validate "$TMP/adir" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
