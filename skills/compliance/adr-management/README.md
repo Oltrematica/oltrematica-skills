@@ -25,7 +25,7 @@ The failure mode of every ADR process is friction: people forget to write record
 ## Installation
 
 This skill now lives in the
-[`oltrematica-compliance-skills`](https://github.com/Oltrematica/oltrematica-compliance-skills)
+[`oltrematica-skills`](https://github.com/Oltrematica/oltrematica-skills)
 repo. Install it in one of two scopes:
 
 ### Per project (shared with the team via git)

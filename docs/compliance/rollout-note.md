@@ -11,9 +11,8 @@ Two Claude Code skills, one repo:
 Install either one with a clone and two copies:
 
 ```bash
-git clone https://github.com/Oltrematica/oltrematica-compliance-skills.git /tmp/ocs
-cp -R /tmp/ocs/skills/cra-evidence  /path/to/repo/.claude/skills/cra-evidence
-cp -R /tmp/ocs/skills/adr-management /path/to/repo/.claude/skills/adr-management
+git clone https://github.com/Oltrematica/oltrematica-skills.git /tmp/os
+/tmp/os/scripts/install.sh cra-evidence adr-management --to /path/to/repo
 ```
 
 Full options in [`docs/distribution.md`](../distribution.md).
