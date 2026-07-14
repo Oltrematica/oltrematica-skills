@@ -2,7 +2,7 @@
 name: <kebab-case-name>
 description: <When to dispatch this agent, in the words the main agent would think. This is the router — it is the only thing seen at dispatch time.>
 tools: <comma-separated allowlist — least privilege. Omit Write/Edit for read-only agents.>
-model: <sonnet | opus | haiku — omit to inherit the session model>
+model: <sonnet | opus | haiku | fable — omit to inherit the session model>
 ---
 
 # <Agent Name>
