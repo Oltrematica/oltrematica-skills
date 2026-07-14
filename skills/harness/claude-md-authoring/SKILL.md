@@ -61,13 +61,24 @@ how you pay for it on every unrelated task.
 This is the most common reason this skill gets invoked, and the instinct — *add a
 stronger instruction, in caps* — makes it worse. Work the list in order:
 
-1. **Measure the length.** `wc -l CLAUDE.md`. Past a couple of hundred lines,
-   instruction-following degrades measurably: rule 80 competes with rule 3, and one
-   of them loses. The fix is subtraction, not emphasis.
-2. **Classify every section as policy or procedure.** Procedure is usually the bulk
-   of it. Each procedure section is a skill that has not been extracted yet.
-   Extracting it shortens the file *and* makes the procedure available on demand —
-   strictly better on both axes.
+1. **Measure the length.** `wc -l CLAUDE.md`. The mechanism is not in dispute: every
+   line here loads into every context window and competes for the same attention —
+   rule 80 competes with rule 3. Whether *your* file has actually crossed the point
+   where that competition costs you is not something to assert from a line count;
+   it is something to measure. Use `harness-eval`'s behavioral-regression mode: trim
+   a candidate section, run the same task before and after, and see whether
+   anything actually moved. If it did, the fix is subtraction, not emphasis. If it
+   didn't, you have learned the section was already dead weight either way.
+2. **Classify every section as policy, procedure, or unverifiable exhortation.**
+   Procedure is usually the bulk of it — each procedure section is a skill that has
+   not been extracted yet, and extracting it shortens the file *and* makes the
+   procedure available on demand, strictly better on both axes. Watch for a third
+   category that fits neither: **unverifiable exhortation** — "be careful," "write
+   good code," "don't break things." It reads like policy but carries no check, so
+   it is not policy — it is noise wearing policy's clothes, diluting the rules that
+   do work. It has exactly two honest outcomes: rewrite it as an imperative,
+   verifiable rule (step 3), or delete it. See `references/antipatterns.md`,
+   antipattern #2.
 3. **Ask whether X must hold *every single time*.** If yes, it is not an
    instruction — it is a **hook**. Instructions are probabilistic; hooks are
    deterministic. "Always run the formatter after editing" belongs in
