@@ -92,7 +92,7 @@ There are no tagged releases yet; updating means tracking `main`.
 | Skill | Needs |
 |-------|-------|
 | `adr-management` | `bash`, `sed`, `find` — present by default on macOS and Linux |
-| `cra-evidence` | `syft` (SBOM, required); `grype` (primary scanner) or `osv-scanner` (fallback); Node + `npx` + Chrome for the a11y module only |
+| `cra-evidence` | `python3` (stdlib only — `diff_sbom.py` is a Python script and `gen_sbom.sh` calls `python3`); `syft` (SBOM, required); `grype` (primary scanner) or `osv-scanner` (fallback); Node + `npx` + Chrome for the a11y module only |
 | Harness-track skills | `bash`, `python3` (stdlib only). The Superpowers plugin must be installed. |
 
 macOS quick install for the compliance scanners:
