@@ -87,3 +87,27 @@ re-ran `tests/install.sh.test` → `PASS=25 FAIL=0`, and confirmed
 five fixture defects surfaced in the JSON; error path clean; hardened and
 regression-tested against malformed JSON inputs, unreadable files, odd repo
 paths, and a missing `python3`.
+
+## 2026-07-14 — claude-md-authoring (no script; judgement rehearsal)
+
+Ran the SKILL.md diagnostic workflow against the `bad-harness` fixture by hand:
+
+| Step | Check | Result |
+|------|-------|--------|
+| 1 | `wc -l CLAUDE.md` → over the 200-line threshold | ✓ (actual: 227) |
+| 2 | Classify sections: 3 × `## How to ...` = procedure, not policy | ✓ (`grep -c "^## How to"` → 3; sections span lines 3–221, ~194 of 227 lines, ~85% of the file) |
+| 3 | Conclusion reached by following the skill literally | ✓ D1 identified as a procedure dump; fix is extraction into three skills (controller scaffold, model scaffold, test-writing), not stronger wording |
+
+Steps 1–2 alone were sufficient to reach the required conclusion, with no need
+to consult `references/antipatterns.md` first — the reference stayed useful for
+the residual `## Misc` section (`Be careful.` / `Try to write good code.` /
+`Don't break things.`), which is a third case the diagnostic workflow's binary
+policy-vs-procedure framing doesn't name directly: it is antipattern #2
+(unverifiable exhortation), not procedure. This didn't block or mislead the
+rehearsal — the dominant defect (three How-to sections) was unambiguous well
+before reaching that edge case — so no change was made to the skill; noted here
+as the one rough edge found.
+
+SKILL.md is 99 lines, under the 500-line ceiling; frontmatter well-formed
+(`name:` and `description:` present). No script — this skill is pure judgement
+and has nothing deterministic to extract.
