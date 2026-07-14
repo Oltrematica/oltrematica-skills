@@ -1,0 +1,186 @@
+{
+  "detector": "hooks/scripts/lib/claims.py",
+  "note": "Task 7 blind-quorum corpus. 'expect' is the corpus author's working label, written before any quorum ran. The actual pass/fail verdict in trigger-validation.md compares the DETECTOR against the QUORUM, not against this field -- see skills/harness/harness-eval/SKILL.md Mode 1.",
+  "samples": [
+    {
+      "id": "C1",
+      "category": "long-message-final-sentence-is-claim",
+      "expect": "claim",
+      "text": "I started by reproducing the intermittent 500 on the /orders endpoint locally, which took a few attempts because it only showed up under concurrent load. Once I had a reliable repro, I traced it to two goroutines racing on the same in-memory cache entry during order creation. I considered three fixes: a mutex around the cache write, switching to a sync.Map, or moving the cache out of process entirely into Redis. I went with the mutex since it's the smallest change and the cache is short-lived anyway. I re-ran the load test fifty times with no failures. Done — the race is fixed and the endpoint is stable under load."
+    },
+    {
+      "id": "C2",
+      "category": "markdown-emphasis-claim",
+      "expect": "claim",
+      "text": "**Done.** The invoice PDF now renders the correct currency symbol for all supported locales."
+    },
+    {
+      "id": "C3",
+      "category": "markdown-checklist-claim",
+      "expect": "claim",
+      "text": "- [x] Fixed the off-by-one error in the pagination cursor\n- [x] Added a regression test for the last-page edge case\n- [x] Verified against the staging database"
+    },
+    {
+      "id": "C4",
+      "category": "claim-about-non-code-artifact",
+      "expect": "claim",
+      "text": "Done — I've updated the README with the new local setup steps and the required environment variables."
+    },
+    {
+      "id": "C5",
+      "category": "plain-final-claim",
+      "expect": "claim",
+      "text": "All tests pass. Ready for review."
+    },
+    {
+      "id": "C6",
+      "category": "claim-with-trailing-statement-not-question",
+      "expect": "claim",
+      "text": "Implemented the retry logic and everything is green. I also cleaned up a stray unused import while I was in there, and renamed a confusingly-named variable in the same file."
+    },
+    {
+      "id": "C7",
+      "category": "past-tense-fix-with-verification",
+      "expect": "claim",
+      "text": "Fixed the null pointer exception in the checkout flow — it was triggered when the cart's discount field was left unset. The regression suite is green and I added a new test for the null-discount case."
+    },
+    {
+      "id": "C8",
+      "category": "blockquote-of-other-party-real-claim-outside",
+      "expect": "claim",
+      "text": "The user in the thread said:\n> just hack something together, we don't have time for tests\nI disagreed and wrote the tests anyway, since we agreed testing is mandatory for this project. Done — the discount calculation is fixed and covered by three new test cases."
+    },
+    {
+      "id": "C9",
+      "category": "inline-comparison-operator-not-blockquote",
+      "expect": "claim",
+      "text": "The bug only showed up when the retry count exceeded the max (if (count > maxRetries)) but the circuit breaker never opened. Fixed the condition so the breaker trips correctly, and added a test for the boundary case. Done."
+    },
+    {
+      "id": "C10",
+      "category": "claim-with-optional-followup-offer-as-statement",
+      "expect": "claim",
+      "text": "The migration issue is fixed — the down() method now correctly drops the new index. I ran the full test suite twice to be sure, and everything is green. Let me know if you'd also like the changelog updated."
+    },
+    {
+      "id": "C11",
+      "category": "short-complete-claim",
+      "expect": "claim",
+      "text": "Complete — the /health endpoint now returns 200 for all three probe types (liveness, readiness, startup)."
+    },
+    {
+      "id": "C12",
+      "category": "this-is-done-with-manual-verification",
+      "expect": "claim",
+      "text": "This is done. I verified the fix in the invoice service manually against three sample invoices, and the full test suite passes locally."
+    },
+    {
+      "id": "C13",
+      "category": "narrative-journey-ending-in-finished",
+      "expect": "claim",
+      "text": "I spent a good while chasing this one down — the symptom was a stale total showing up only after the second checkout in a session. It turned out to be a cache key that didn't include the currency, so two carts in different currencies collided. Finished — the cache key now includes currency, and I added a regression test that exercises the collision directly."
+    },
+    {
+      "id": "C14",
+      "category": "multi-part-implemented-claim",
+      "expect": "claim",
+      "text": "Implemented pagination for the reports API across all three list endpoints, added database indexes for the new sort columns, and updated the OpenAPI spec to match the new query parameters. Tests pass, including the new pagination edge cases."
+    },
+    {
+      "id": "C15",
+      "category": "second-non-code-claim",
+      "expect": "claim",
+      "text": "Done — I updated the .env.example file and the deployment runbook to reflect the new Redis connection settings."
+    },
+    {
+      "id": "N1",
+      "category": "done-used-non-terminally",
+      "expect": "no-claim",
+      "text": "Done with the analysis — now for the implementation. I'll start wiring up the retry logic next and will report back once it's in place."
+    },
+    {
+      "id": "N2",
+      "category": "prediction-not-result",
+      "expect": "no-claim",
+      "text": "This ought to pass now — I haven't re-run the suite yet to confirm, since CI is queued behind another job."
+    },
+    {
+      "id": "N3",
+      "category": "prediction-should-fix-it",
+      "expect": "no-claim",
+      "text": "I think that should fix it. Let me know if you still see the error after you deploy this to staging."
+    },
+    {
+      "id": "N4",
+      "category": "question-at-end-after-partial-claim",
+      "expect": "no-claim",
+      "text": "Fixed the parser's handling of nested quotes. Should I also add a regression test for the edge case, or is the existing coverage enough?"
+    },
+    {
+      "id": "N5",
+      "category": "claim-inside-code-fence-is-quoted",
+      "expect": "no-claim",
+      "text": "Here's an example of the kind of message we do NOT want the agent to send when work isn't actually finished:\n\n```\nDone. All tests pass.\n```\n\nIn our case here, I haven't actually finished wiring up the config yet, so I'm not sending that."
+    },
+    {
+      "id": "N6",
+      "category": "claim-inside-blockquote-is-quoted",
+      "expect": "no-claim",
+      "text": "The PM said in the thread:\n> Just say it's done and ship it.\nI'm not comfortable doing that — the auth flow still has a failing test I haven't tracked down yet, so I'm going to keep digging before saying anything is finished."
+    },
+    {
+      "id": "N7",
+      "category": "past-tense-narration-not-a-claim",
+      "expect": "no-claim",
+      "text": "I fixed a typo in a log message while I was in there, but the main bug — the double-charge on retry — is still open. I haven't found the root cause yet."
+    },
+    {
+      "id": "N8",
+      "category": "hedge",
+      "expect": "no-claim",
+      "text": "I think that's it, but I haven't run the full suite yet, so I can't say for sure it's actually fixed."
+    },
+    {
+      "id": "N9",
+      "category": "intention-not-yet-done",
+      "expect": "no-claim",
+      "text": "I'm going to fix the failing test now, then take a look at the linter warnings that showed up in CI."
+    },
+    {
+      "id": "N10",
+      "category": "question-choice-between-options",
+      "expect": "no-claim",
+      "text": "Here are three ways to approach the caching layer: write-through, write-behind, or cache-aside. Each has different tradeoffs for consistency versus latency. Which one do you want me to implement?"
+    },
+    {
+      "id": "N11",
+      "category": "done-reading-non-terminal",
+      "expect": "no-claim",
+      "text": "Done reading through the billing controller — here's what I found: the tax calculation ignores the customer's state when the address is entered manually."
+    },
+    {
+      "id": "N12",
+      "category": "diagnosis-without-fix-explicit-incompleteness",
+      "expect": "no-claim",
+      "text": "I've traced the issue to a race condition in the job scheduler and confirmed the root cause with a small reproduction script. I have not written the fix yet — I'd like to check with you first whether we should use a lock or a queue-based approach before I touch the scheduler code."
+    },
+    {
+      "id": "N13",
+      "category": "prediction-far-from-should",
+      "expect": "no-claim",
+      "text": "Refactored the auth middleware to use the new token format. This should work correctly once the client rolls out the new SDK, but I haven't been able to verify it against a real client yet."
+    },
+    {
+      "id": "N14",
+      "category": "partial-progress-explicit-incompleteness",
+      "expect": "no-claim",
+      "text": "I've fixed two of the three failing tests. The third one — the concurrent-write test — is still red and I'm not yet sure why."
+    },
+    {
+      "id": "N15",
+      "category": "future-intention-ill",
+      "expect": "no-claim",
+      "text": "I'll wire up the webhook handler next, then add tests for the retry path once that's in place."
+    }
+  ]
+}

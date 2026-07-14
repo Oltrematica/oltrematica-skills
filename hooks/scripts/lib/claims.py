@@ -37,6 +37,24 @@ CLAIM = re.compile(
     """,
 )
 
+# Verb-phrase completion assertions ("the migration issue is fixed", "...and
+# everything is green") that report a result just as clearly as the
+# sentence-initial forms above, but sit mid-sentence — joined to the previous
+# clause by "and", an em dash, or a subject ("X is fixed" rather than a bare
+# "Fixed"). CLAIM's leading sentence-boundary anchor deliberately misses these
+# (Task 7 quorum finding: a 3/3-claim sample the sentence-initial-only pattern
+# scored as no-claim — a MISS, the safer failure, but still a real hole).
+# Unlike CLAIM, this is intentionally NOT anchored to a sentence boundary,
+# because the verb ("is/was/are/were fixed") is what carries the assertion,
+# not its position in the sentence. NOT_A_CLAIM's conditional guard below
+# keeps this from firing on a hypothetical ("once this is fixed...").
+CLAIM_MIDSENTENCE = re.compile(
+    r"""(?ix)
+    \b(?:is|was|are|were)\s+(?:now\s+)?fixed\b
+  | \beverything\s+is\s+green\b
+    """,
+)
+
 # Things that look like claims but are not: predictions, questions, intentions.
 NOT_A_CLAIM = re.compile(
     r"""(?ix)
@@ -49,6 +67,11 @@ NOT_A_CLAIM = re.compile(
       | \bi'?ll\b | \bi\s+will\b | \bgoing\s+to\b | \bnext\s+i\b
       | \bnow\s+(?:for|to)\b               # "done with X, now for Y" — a
                                             # transition, not a finish line
+      | \b(?:once|if|when|after)\b(?:(?!["'.\n!?]).){0,60}\b(?:is|are|was|were)\s+fixed\b
+                                           # a conditional/hypothetical
+                                           # ("once this is fixed..."), not a
+                                           # reported result — guards
+                                           # CLAIM_MIDSENTENCE above
       | \?\s*$                            # a question
     )
     """,
@@ -81,7 +104,8 @@ def claims_completion(text: str) -> bool:
         return False
     if NOT_A_CLAIM.search(text):
         return False
-    return bool(CLAIM.search(_normalize(text)))
+    normalized = _normalize(text)
+    return bool(CLAIM.search(normalized) or CLAIM_MIDSENTENCE.search(normalized))
 
 
 def main() -> None:
