@@ -34,6 +34,14 @@ way a human can type):
 - A `prompt` may be missing, non-string, empty, or whitespace-only.
 - A prompt containing a literal `|` would otherwise corrupt the markdown table
   emitted by --emit-table; it is escaped.
+- A prompt containing a literal newline or carriage return would otherwise
+  split a table row across physical lines when rendered (a lone `\r` is a
+  line ending too, per CommonMark) — this is rejected at --validate time,
+  naming the offending prompt, rather than silently mangled at render time.
+- `emit_table()` also defensively neutralizes any newline, carriage return,
+  or tab that still reaches it (e.g. via `regressions[].expect_observable`,
+  a field --validate does not scrutinize) so it can never emit a
+  structurally broken table even if a future code path bypasses validation.
 - The spec file may not exist, may be a directory, may not be valid UTF-8, or
   may not be valid JSON — each produces one actionable stderr line, never a
   traceback.
@@ -105,6 +113,14 @@ def validate(spec, path):
             if not isinstance(text, str) or not text.strip():
                 problems.append(f"{name}: an entry has no non-empty 'prompt' string")
                 continue
+            if "\n" in text or "\r" in text:
+                problems.append(
+                    f"{name}: prompt {text!r} contains a newline/carriage return; "
+                    f"a prompt is a single utterance and must be a single line, or "
+                    f"it would split the markdown table row across physical lines "
+                    f"when rendered"
+                )
+                continue
             if expect not in VALID_EXPECT:
                 problems.append(
                     f"{name}: prompt {text!r} has expect={expect!r}; "
@@ -143,6 +159,28 @@ def validate(spec, path):
     return problems
 
 
+# Characters that can corrupt a markdown table cell/row if embedded raw:
+# `|` reads as a new column boundary; `\n` and a lone `\r` are both line
+# endings per CommonMark and would split the cell across physical lines,
+# breaking the row; `\t` is normalized too so a stray tab cannot skew a
+# table's visual alignment. Skill prompts are rejected at --validate time
+# before ever reaching here (see validate()); this translation table is a
+# defensive backstop so emit_table() itself can never produce a
+# structurally broken table — including for spec fields --validate does not
+# scrutinize for control characters (e.g. regressions[].expect_observable),
+# or if a future code path bypasses validation entirely.
+_TABLE_CELL_ESCAPES = str.maketrans({
+    "|": "\\|",
+    "\n": " ",
+    "\r": " ",
+    "\t": " ",
+})
+
+
+def _table_cell(text):
+    return text.translate(_TABLE_CELL_ESCAPES)
+
+
 def emit_table(spec):
     out = []
     for skill in spec["skills"]:
@@ -151,7 +189,7 @@ def emit_table(spec):
         out.append("| # | Prompt | Expected | Verdict | Judges |")
         out.append("|---|--------|----------|---------|--------|")
         for n, entry in enumerate(skill["prompts"], start=1):
-            prompt = entry["prompt"].replace("|", "\\|")
+            prompt = _table_cell(entry["prompt"])
             out.append(f"| {n} | \"{prompt}\" | {entry['expect']} | | |")
         out.append("")
 
@@ -162,8 +200,8 @@ def emit_table(spec):
         out.append("| # | Prompt | Expected observable | Before | After |")
         out.append("|---|--------|---------------------|--------|-------|")
         for n, entry in enumerate(regressions, start=1):
-            prompt = entry["prompt"].replace("|", "\\|")
-            expected = entry["expect_observable"].replace("|", "\\|")
+            prompt = _table_cell(entry["prompt"])
+            expected = _table_cell(entry["expect_observable"])
             out.append(f"| {n} | \"{prompt}\" | {expected} | | |")
         out.append("")
 

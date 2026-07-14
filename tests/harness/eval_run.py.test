@@ -161,6 +161,63 @@ ERR=$(python3 "$EVAL" --validate "$TMP/adir" 2>&1); RC=$?
 check "exit 2" "2" "$RC"
 check "no traceback" "no" "$(no_traceback "$ERR")"
 
+echo "17. a prompt containing a literal newline is rejected at --validate"
+python3 - "$TMP/newline.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(4)] + \
+    [{"prompt": "line one\nline two", "expect": "trigger"}] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "newline", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/newline.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+check "names the offending prompt" "yes" "$(echo "$ERR" | grep -qi "line one" && echo yes || echo no)"
+
+echo "18. a prompt containing a carriage return is rejected at --validate"
+python3 - "$TMP/carriage.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(4)] + \
+    [{"prompt": "line one\rline two", "expect": "trigger"}] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "carriage", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/carriage.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+check "names the offending prompt" "yes" "$(echo "$ERR" | grep -qi "line one" && echo yes || echo no)"
+
+echo "19. --emit-table never emits a row broken across physical lines, even for a"
+echo "    field --validate does not scrutinize (regressions[].expect_observable)"
+python3 - "$TMP/regression-ctrl.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(5)] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+regressions = [
+    {"prompt": f"reg {i}", "expect_observable": "before\nafter\ttabbed\rcr"}
+    for i in range(3)
+]
+json.dump(
+    {"skills": [{"name": "safe", "prompts": p}], "regressions": regressions},
+    open(sys.argv[1], "w"),
+)
+PY
+python3 "$EVAL" --validate "$TMP/regression-ctrl.json" >/dev/null 2>&1
+check "spec still validates (regressions content is not scrutinized)" "0" "$?"
+OUT=$(python3 "$EVAL" --emit-table "$TMP/regression-ctrl.json" 2>&1); RC=$?
+check "exit 0" "0" "$RC"
+DATA_ROWS=$(echo "$OUT" | grep -cE '^\| [0-9]+ \|')
+check "13 data rows total (10 prompts + 3 regressions), each starting with |" "13" "$DATA_ROWS"
+# The DATA_ROWS check above is necessary but NOT sufficient: an embedded \n
+# that splits a row produces one extra physical line that does not start
+# with "|" and would sail straight through a "starts with |" count. The
+# total physical line count of the document is fixed by its structure (2
+# section headers, 2 table headers, 2 separators, 13 data rows, 2 trailing
+# blanks = 22 lines) and is the assertion that actually catches a row
+# splitting across physical lines.
+TOTAL_LINES=$(echo "$OUT" | wc -l | tr -d ' ')
+check "document has exactly 22 physical lines (no row split across lines)" "22" "$TOTAL_LINES"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
