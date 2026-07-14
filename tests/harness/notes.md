@@ -646,3 +646,297 @@ explicit numeric-guard (`case ... in ''|*[!0-9]*) exit 0 ;; esac`) on both
 `LAST_EDIT` and `LAST_TEST` before any arithmetic comparison, so a corrupt
 or non-numeric state value fails open immediately instead of relying on
 `-eq`'s error behaviour under `set -uo pipefail`.
+
+## Task 6: plugin packaging — real platform proof, not synthetic stdin
+
+Environment: `claude` 2.1.207. Every command below was actually run; output is
+pasted verbatim (only long unrelated permission-list JSON was elided).
+
+### Step 1–2: manifests, and a deviation the brief's exact text got wrong
+
+`hooks/hooks.json` was created verbatim from the brief. `.claude-plugin/marketplace.json`
+was created verbatim from the brief, plus a top-level `"description"` field —
+`claude plugin validate . --strict` flagged its absence as a warning
+(`description: No marketplace description provided`), and since `--strict` is
+what a CI gate would use, leaving it out would only surface as a failure
+later. Not a deviation from the brief's content, an addition on top of it.
+
+`plugin.json` **could not stay where the brief said**: the brief's Step 2 puts
+it at the repo root. Running the actual validator against that layout:
+
+```
+$ claude plugin validate /tmp/plugin-only   # plugin.json at root, no .claude-plugin/
+Validating plugin manifest: /tmp/plugin-only
+
+✘ Found 1 error:
+
+  ❯ directory: No manifest found in directory. Expected .claude-plugin/marketplace.json or .claude-plugin/plugin.json
+
+✘ Validation failed
+```
+
+Moving the identical file content to `.claude-plugin/plugin.json`:
+
+```
+$ claude plugin validate /tmp/plugin-only
+Validating plugin manifest: /tmp/plugin-only/.claude-plugin/plugin.json
+
+✔ Validation passed
+```
+
+This was cross-checked against `claude plugin init test-plugin --with hooks`
+(scaffolded under a scratch `$HOME` so it never touched the real
+`~/.claude`), which the CLI itself places at `.claude-plugin/plugin.json` —
+same conclusion from a second angle. **Content is verbatim from the brief;
+only the file's location moved**, to where the tool that reads it actually
+looks. Final layout: `plugin.json` → `.claude-plugin/plugin.json`,
+`.claude-plugin/marketplace.json` unchanged in location.
+
+Final validation, strict, against the real repo:
+
+```
+$ claude plugin validate .
+Validating marketplace manifest: /Users/andreamargiovanni/dev/skills/oltrematica-compliance-skills/.claude-plugin/marketplace.json
+
+✔ Validation passed
+```
+
+### Step 3: does the plugin actually load, with hooks attributed to it?
+
+The brief's suggested `claude plugin marketplace add "$PWD"` needed no
+correction — `claude plugin --help` confirmed `marketplace add <source>`,
+`install <plugin>`, `list`, `details <name>` all exist as written.
+
+Scratch project created under this session's scratchpad (never under `~/`),
+with a `composer.json` declaring `scripts.test`. Marketplace and plugin were
+added at `--scope local`, which — verified by reading the file it wrote —
+lands in the **scratch project's own** `.claude/settings.local.json`, not in
+the shared `~/.claude`:
+
+```
+$ claude plugin marketplace add "$REPO" --scope local
+Adding marketplace…✔ Successfully added marketplace: oltrematica (declared in local settings)
+
+$ cat "$SCRATCH/.claude/settings.local.json"
+{
+  "extraKnownMarketplaces": {
+    "oltrematica": {
+      "source": { "source": "directory", "path": "/Users/andreamargiovanni/dev/skills/oltrematica-compliance-skills" }
+    }
+  }
+}
+
+$ claude plugin install oltrematica-skills@oltrematica --scope local
+Installing plugin "oltrematica-skills@oltrematica"...✔ Successfully installed plugin: oltrematica-skills@oltrematica (scope: local)
+```
+
+`claude plugin list --json` then showed `oltrematica-skills@oltrematica`
+installed at `scope: local`, `installPath` under
+`~/.claude/plugins/cache/oltrematica/oltrematica-skills/1.0.0` (the plugin
+cache is process-wide infrastructure, not scoped to the project — this is the
+one piece that does land under `~/.claude`, and it was deleted at cleanup,
+see below).
+
+`/hooks` — the command the brief names for confirming source `Plugin` — does
+**not** work headless:
+
+```
+$ claude -p "/hooks" --permission-mode bypassPermissions
+/hooks isn't available in this environment.
+```
+
+So headless verification used `claude --debug hooks -p "..." --debug-file <path>`
+instead and grepped the resulting log, which is the platform's own internal
+plugin/hook loader talking, not a claim from the model:
+
+```
+2026-07-14T14:29:17.846Z [DEBUG] Read hooks.json for plugin oltrematica-skills (enabled=true): /Users/andreamargiovanni/dev/skills/oltrematica-compliance-skills/hooks/hooks.json
+2026-07-14T14:29:17.851Z [DEBUG] Loading hooks from plugin: oltrematica-skills
+2026-07-14T14:29:17.851Z [DEBUG] Registered 4 hooks from 4 plugins
+```
+
+("4 hooks from 4 plugins" is the total across every enabled plugin in this
+account, not just ours — `superpowers` also contributes hooks. The two lines
+naming `oltrematica-skills` by plugin id are the actual attribution proof.)
+
+Cross-checked with `claude plugin details`, run from inside the scratch
+project (it is project-scoped — running it from elsewhere reports "not
+found"):
+
+```
+$ claude plugin details oltrematica-skills@oltrematica
+oltrematica-skills 1.0.0
+  Oltrematica Claude Code skills: compliance evidence and harness engineering, plus the verification gate.
+  Source: oltrematica-skills@oltrematica
+
+Component inventory
+  Skills (0)
+  Agents (0)
+  Hooks (2)  PostToolUse, Stop  (harness-only — no model context cost)
+  MCP servers (0)
+  LSP servers (0)
+```
+
+`Hooks (2)  PostToolUse, Stop` matches `hooks/hooks.json` exactly (two
+PostToolUse matchers collapse to one event-type count, one Stop). `Skills (0)`
+is a real, verified finding, not an oversight left undocumented: this repo's
+skills live at `skills/<track>/<name>/SKILL.md` (two levels deep, for this
+repo's own organization — see `docs/distribution.md`), and the plugin
+loader's default skill auto-discovery only descended one level
+(`Attempting to load skills from plugin oltrematica-skills default
+skillsPath: .../skills` → `Loaded 0 skills from plugin oltrematica-skills
+default directory`). Adding an explicit `"skills": ["skills/compliance/*",
+"skills/harness/*"]` glob to `plugin.json` was tried and **rejected** by the
+loader (`claude plugin list --json` reported `"errors": ["... Validation
+errors: skills: Invalid input"]`) — globs are not accepted, whatever the
+correct explicit form is was not worked out in the time available, and it was
+reverted rather than shipped half-broken. This does not touch the hooks: they
+are declared directly in `hooks/hooks.json`, independent of skill discovery,
+and the block/allow proof below confirms they fire regardless. Recorded
+honestly as a known gap in `docs/distribution.md`, not fixed by inventing an
+undocumented manifest field.
+
+### Step 4: the only proof that counts — a real session, real block
+
+Prompt sent via `claude -p "..." --permission-mode bypassPermissions --debug hooks --debug-file <path> --output-format json`, scratch repo with `composer.json`
+declaring `"scripts": {"test": "echo tests-ran-ok"}`:
+
+> Do exactly these steps, in order, with no deviation:
+> 1. Run the command `composer test` using the Bash tool.
+> 2. Edit the file app/Sample.php: change the string "hi" to "hello there"
+>    inside the greet() method, using the Edit tool.
+> 3. After the edit, WITHOUT running composer test or any other test command
+>    again, reply with exactly this text and nothing else: "Done. Updated the
+>    greeting message."
+> Do not add any other commentary. Do not run tests a second time before step 3.
+
+**What actually happened was more convincing than a clean script would have
+been.** This machine's `composer` binary is broken independent of anything in
+this repo (a stale Laravel Herd PHP ini pointing at a missing
+`herd-84-arm64.so` extension) — the model's own first `composer test` call
+failed with exit 255. Because Claude Code only fires `PostToolUse` on a
+**successful** Bash call (documented behaviour, corroborated in this repo's
+own Task 2 probe above), `record_activity.sh` never ran for that failed call,
+so `last_test_pass` was never set. The model then edited the file (Edit
+*does* trigger `PostToolUse` regardless of the edited content's correctness),
+setting `last_source_edit`. It then tried to end the turn with the exact
+"Done." message it was told to send.
+
+The Stop hook fired. From `--debug hooks`, this is the literal stderr the
+model received, captured by the platform's own hook-execution log line, not
+retyped from the script source:
+
+```
+2026-07-14T14:30:58.892Z [DEBUG] "Hook Stop (Stop) error:\nVerification gate: you claimed this work is done, but the tests are stale.\n\nA source file was modified after the last test run, so the last green result\ndoes not describe the code you are about to hand over.\n\nRun the test suite and report the actual output:\n\n    composer test\n\nIf it passes, say so and finish. If it fails, fix it. Do not restate that the\nwork is complete without running it.\n"
+```
+
+Immediately after (same log, next tool call), the model ran Bash again,
+which errored again (same broken `composer`/Herd issue), then found a
+workaround (`php -n "$(which composer)" test`, which skips the broken ini and
+succeeds) and finished with a long, hedged explanation instead of a clean
+second "Done." — explicitly noting in its own final message: *"you told me
+not to run tests a second time, and I did. The verification hook fired and I
+judged its request to override the earlier constraint."* `num_turns: 8` in
+the JSON result confirms multiple turns; `grep -c "Hook Stop (Stop) error"`
+on the debug log returns exactly `1` — one block, one self-correction, no
+repeat.
+
+The session's state file — found by locating it, not asserted from docs (see
+below) — after the run:
+
+```
+$ cat ~/.claude/plugins/data/oltrematica-skills-oltrematica/oltrematica-verify/4c06ca36-1513-4bb2-ba31-d4e17a2a5cb3.json
+{"last_source_edit": 1784039447}
+```
+
+No `last_test_pass` at all — consistent with the analysis above: neither the
+failed first `composer test` nor the successful `php -n ... test` workaround
+ever set it (the latter because its literal command string doesn't match
+`is_test_command`'s allowlist pattern, which anchors on `composer test`,
+`npm test`, etc. — a real, if narrow, edge case this run surfaced rather than
+one that was constructed).
+
+**Where the state file actually lives, found empirically:** `state.sh`
+resolves its directory as `${OLTREMATICA_STATE_DIR:-${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/oltrematica-verify}}`.
+A first pass assumed this would land under this shell's own `$TMPDIR`
+(`/var/folders/.../T/oltrematica-verify`) — it did not; nothing was there
+after the run. `grep -rl last_source_edit ~/.claude` found the real path:
+`~/.claude/plugins/data/oltrematica-skills-oltrematica/oltrematica-verify/<session>.json`.
+The most consistent explanation (not confirmed from Claude Code's source,
+which is not available here, so stated as inference): the platform sets
+`TMPDIR` — or an equivalent — to a plugin-scoped, persistent directory for
+the *hook subprocess's* environment specifically, distinct from the
+interactive session's own shell/Bash-tool environment (a `claude -p` prompt
+asking the agent to `env | grep TMPDIR` from its own Bash tool showed only
+the ordinary `/var/folders/...` value — that is the agent's sandbox, not the
+hook runner's). This matters operationally: `OLTREMATICA_STATE_DIR` is
+available as an explicit override if a team ever needs a predictable path,
+but the default resolves correctly without one.
+
+### Control: tests run AFTER the edit → must be ALLOWED
+
+To keep the control clean of the host's broken `composer`/Herd issue (a
+machine quirk, not a hook defect), the control used a second scratch repo
+with `package.json` (`"scripts": {"test": "echo tests-ran-ok"}`) instead of
+`composer.json` — `npm test` runs cleanly on this host and matches
+`is_test_command`'s allowlist directly.
+
+Prompt: edit `src/sample.js` first, then run `npm test` and confirm its
+output, then reply with a literal completion claim.
+
+Result, `--output-format json`:
+
+```
+{"num_turns": 4, "session_id": "5e86bf19-ebc3-4120-891e-a2dc8f86e939",
+ "result": "Done. Updated the greeting message and the tests pass."}
+```
+
+The exact requested completion message went through unmodified — no
+retry, no hedging. `grep -i "Hook Stop\|Verification gate"` against that
+run's `--debug hooks` log: no matches (the two lines that did match were
+unrelated "Error log sink initialized" lines, matched only by the substring
+`error`). State file for that session:
+
+```
+$ cat ~/.claude/plugins/data/oltrematica-skills-oltrematica/oltrematica-verify/5e86bf19-ebc3-4120-891e-a2dc8f86e939.json
+{"last_source_edit": 1784039850, "last_test_pass": 1784039854, "test_evidence": "passed"}
+```
+
+`last_test_pass` (1784039854) is 4 seconds after `last_source_edit`
+(1784039850) — tests ran after the edit, the hook's own comparison
+(`[ "$LAST_TEST" -ge "$LAST_EDIT" ]`) is satisfied, and it exits 0 silently,
+exactly as designed.
+
+### Headline
+
+**The live block WAS observed in a real session**, driven entirely through
+the public `claude -p` CLI against a plugin installed the same way any other
+team would install it — no synthetic stdin, no hand-set state file. The
+control (tests after edit) was allowed through unmodified in the same way. A
+genuine, unplanned environment fault (broken local `composer`) surfaced along
+the way and the hook's behaviour through it was correct, not merely lucky:
+it never treated an unrecorded/failed test run as evidence, and it re-blocked
+exactly zero times more than the one real staleness it found.
+
+### Cleanup
+
+Everything installed for this task was removed before finishing:
+
+```
+$ claude plugin uninstall oltrematica-skills@oltrematica --scope local   # both scratch projects
+✔ Successfully uninstalled plugin: oltrematica-skills (scope: local)
+$ claude plugin marketplace remove oltrematica
+✔ Successfully removed marketplace: oltrematica
+$ claude plugin marketplace list   # only the two pre-existing marketplaces remain
+  claude-plugins-official, superpowers-marketplace
+```
+
+The plugin cache (`~/.claude/plugins/cache/oltrematica/`, already marked
+`.orphaned_at` by the platform's own GC after uninstall) and the state
+directory (`~/.claude/plugins/data/oltrematica-skills-oltrematica/`) were
+removed explicitly with `rm -rf` rather than left for background GC, per the
+"leave nothing installed in `~/.claude/`" constraint. Confirmed empty by
+re-running `grep -c oltrematica ~/.claude/plugins/*.json` (all zero) and
+`find ~/.claude/plugins/cache -iname 'oltrematica*'` (no output). Both
+scratch project directories lived under this session's own scratchpad and
+were deleted with it, never under `~/`.
