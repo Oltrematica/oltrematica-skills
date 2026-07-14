@@ -56,9 +56,9 @@ between `harness-audit` and CRA-compliance questions, and — after the first pa
 looked suspiciously clean — a genuine under-triggering failure in `model-routing`'s
 own description once the test prompts were rewritten to stop quoting the description
 verbatim. Both were fixed and re-verified; the full ledger, including the rounds that
-failed before the fix, is in `tests/harness/trigger-validation.md`. Final state: 51
-of 51 trigger checks pass, unanimous, across the five skills — but that number came
-from 336 individual judgements across every round run, including the ones that
+failed before the fix, is in `tests/harness/trigger-validation.md`. Final state: 52
+of 52 trigger checks pass, unanimous, across the five skills — but that number came
+from 372 individual judgements across every round run, including the ones that
 turned up a flaky split and a real failure. The clean final number is not the
 interesting part of that file; the rounds before it are.
 
