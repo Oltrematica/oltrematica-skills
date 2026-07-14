@@ -57,6 +57,7 @@ on pull. Full options — personal scope, submodule, updating — in
 | `skills/harness/` | Harness-track skills |
 | `scripts/install.sh` | Track-aware installer |
 | `docs/` | Distribution, contributing conventions, per-track briefs |
+| `docs/superpowers/` | Plans and specs for this repo's own development |
 | `tests/` | Fixture repos, trigger validation, test evidence (living documentation) |
 
 ## Contributing a skill
