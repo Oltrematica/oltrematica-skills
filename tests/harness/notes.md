@@ -111,3 +111,65 @@ as the one rough edge found.
 SKILL.md is 99 lines, under the 500-line ceiling; frontmatter well-formed
 (`name:` and `description:` present). No script — this skill is pure judgement
 and has nothing deterministic to extract.
+
+## 2026-07-14 — subagent-authoring (no script; selector validation)
+
+Artifact selector walked against the brief's four cases; each landed on exactly
+one row:
+
+| Case | Selected | Ambiguous? |
+|------|----------|------------|
+| "Format every file after editing" | Hook | no — "every" is decisive, and the trigger (`PostToolUse` on `Edit`/`Write`) is mechanical |
+| "Survey auth across 40 files" | Subagent | no — conclusion, not work |
+| "Draft an ADR when a decision is made" | Skill | no, but only after a table fix — see below |
+| "Fire a release checklist on demand" | Slash command | no — human-triggered |
+
+**Table fix made before this passed cleanly**: the brief's original hook
+criterion was "must happen every time" alone. Walking the ADR case
+("whenever we make an architectural decision") against that single-part test
+was genuinely ambiguous: "whenever" satisfies "must happen every time" just as
+well as the formatting case does, which would pull it toward Hook — the wrong
+answer, since detecting "an architectural decision was made" takes judgment no
+hook can perform. Added a second, mandatory part to the hook test: the trigger
+must be a mechanical event the harness can observe without judgment (file
+saved, tool called, session start/stop). Both parts must hold. This closed the
+ambiguity: the ADR case fails part 2, so it is a skill; the formatting case
+passes both, so it is a hook. Worked the contrast explicitly in the SKILL.md
+prose so the next reader doesn't rediscover the same trap.
+
+**Two additional hard cases invented (not in the brief), walked after the fix**:
+
+| Case | Selected | Ambiguous? |
+|------|----------|------------|
+| "Before merging, always double-check the PR description matches the diff" | Subagent | no, but non-obvious — see below |
+| "Whenever a PR touches payments, ping the payments team lead" | Out of scope (none of the four) | no, once the scope boundary is stated |
+
+- The PR-description case is a trap in the *other* direction from the ADR case:
+  "always" tempts a hasty reader toward Hook, but comparing free-text meaning is
+  judgment, so it fails part 2 of the hook test and is not a hook. Applying the
+  skill-vs-subagent decisive question ("work or conclusion?") resolves it
+  cleanly: the caller only needs a verdict (match / mismatch + reason), so it's
+  a review-type Subagent, not a Skill. In practice this case decomposes into two
+  artifacts — a Subagent that renders the verdict, and (separately) a Hook that
+  gates the merge on that verdict — which the table handles by being applied
+  twice, not by adding a fifth row.
+- The payments-PR case exposed a real gap in the original four rows: "PR
+  opened" is mechanical in principle but is a GitHub/GitLab event, not
+  something a Claude Code `settings.json` hook can observe — the four rows are
+  scoped to Claude Code session artifacts. Added an explicit scope-boundary
+  sentence to SKILL.md so this resolves as a decisive "none of the four, here's
+  where it actually belongs" rather than a forced, wrong pick.
+
+**Handoff check**: both `harness-audit` and `claude-md-authoring` hand off "a
+subagent, a command, or a hook" decision to this skill by name. The shipped
+SKILL.md originally (per the brief) only detailed subagent authoring; slash
+commands were named in this skill's own trigger description ("add a /deploy
+command") but had no authoring section, which would have been a dead-end
+handoff. Added an "Authoring a slash command" section (`.claude/commands/`
+frontmatter + body shape) so all three referenced artifacts are actually
+deliverable here, not just decided.
+
+SKILL.md is 135 lines, under the 500-line ceiling; hooks handed off to
+`update-config` (never hand-edited); least-privilege tool guidance present
+(`Read, Grep, Glob, Bash` — no `Write`/`Edit` — for research/review agents).
+`assets/agent_template.md` matches the brief's template exactly.
