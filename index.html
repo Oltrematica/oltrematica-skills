@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Oltrematica Skills — evidence, never assertion</title>
+<meta name="description" content="A two-track Claude Code skills catalogue: regulatory evidence that produces itself, and an agent harness that can be audited and tested." />
+<style>
+  /* ============================================================
+     Tokens. Instrument palette: ink ground, cool neutrals,
+     a single signal amber. Semantic trio is separate from accent.
+     ============================================================ */
+  :root {
+    --ink-900:#0B0F14; --ink-800:#111721; --ink-700:#19202B; --ink-600:#232C39;
+
+    --bg:#F5F6F8;
+    --surface:#FFFFFF;
+    --deep:var(--ink-900);        /* the machine-room ground */
+    --deep-2:var(--ink-800);
+    --text:#141A22;
+    --muted:#5D6875;
+    --line:#DFE2E7;
+    --line-strong:#C4CAD3;
+
+    --signal:#9A6207;             /* amber, darkened for light ground */
+    --signal-bright:#E8A33D;
+    --ok:#2F7A6B;
+    --gap:#A8621B;
+    --crit:#B23F38;
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+    --col: 68ch;
+    --r: 2px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0B0F14; --surface:#111721;
+      --deep:#05080B; --deep-2:#0B0F14;
+      --text:#E4E9F0; --muted:#8B97A6;
+      --line:#222B36; --line-strong:#33404F;
+      --signal:#E8A33D; --ok:#4FB3A0; --gap:#D9903F; --crit:#E0645C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0B0F14; --surface:#111721;
+    --deep:#05080B; --deep-2:#0B0F14;
+    --text:#E4E9F0; --muted:#8B97A6;
+    --line:#222B36; --line-strong:#33404F;
+    --signal:#E8A33D; --ok:#4FB3A0; --gap:#D9903F; --crit:#E0645C;
+  }
+  :root[data-theme="light"] {
+    --bg:#F5F6F8; --surface:#FFFFFF;
+    --deep:#0B0F14; --deep-2:#111721;
+    --text:#141A22; --muted:#5D6875;
+    --line:#DFE2E7; --line-strong:#C4CAD3;
+    --signal:#9A6207; --ok:#2F7A6B; --gap:#A8621B; --crit:#B23F38;
+  }
+
+  *,*::before,*::after { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); font-size:17px; line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection { background:var(--signal-bright); color:#0B0F14; }
+  a { color:inherit; text-underline-offset:3px; text-decoration-color:var(--line-strong); }
+  a:hover { text-decoration-color:var(--signal); }
+  :focus-visible { outline:2px solid var(--signal); outline-offset:3px; }
+
+  /* ---------- the measurement rail ---------- */
+  .rail { position:relative; }
+  .rail::before {
+    content:""; position:absolute; left:0; top:0; bottom:0; width:1px;
+    background:var(--line);
+  }
+  @media (max-width:900px){ .rail::before{ display:none; } }
+
+  .wrap { max-width:1160px; margin:0 auto; padding:0 28px; }
+  .col  { max-width:var(--col); }
+
+  /* ---------- type ---------- */
+  h1,h2,h3 { text-wrap:balance; margin:0; letter-spacing:-0.022em; font-weight:680; line-height:1.08; }
+  h1 { font-size:clamp(2.6rem, 6.2vw, 4.6rem); letter-spacing:-0.035em; font-weight:720; }
+  h2 { font-size:clamp(1.7rem, 3vw, 2.35rem); }
+  h3 { font-size:1.06rem; letter-spacing:-0.01em; font-weight:660; }
+  p  { margin:0; }
+  .lede { font-size:clamp(1.1rem,1.6vw,1.28rem); line-height:1.55; color:var(--text); }
+  .muted { color:var(--muted); }
+
+  .eyebrow {
+    font-family:var(--mono); font-size:.68rem; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--muted); font-weight:500;
+    display:flex; align-items:center; gap:.7em;
+  }
+  .eyebrow::before {
+    content:""; width:14px; height:1px; background:var(--signal); flex:none;
+  }
+
+  .stack   { display:flex; flex-direction:column; gap:22px; }
+  .stack-s { display:flex; flex-direction:column; gap:12px; }
+  section  { padding:76px 0; border-top:1px solid var(--line); }
+  section:first-of-type { border-top:0; }
+
+  /* ---------- hero ---------- */
+  .hero { padding:clamp(70px,11vh,120px) 0 74px; border-top:0; }
+  .hero .col { max-width:20ch; }
+  .hero h1 em {
+    font-style:normal; color:var(--signal);
+    /* the one place the accent is spent large */
+  }
+  .hero-sub { max-width:56ch; margin-top:28px; }
+  .kicker {
+    font-family:var(--mono); font-size:.7rem; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:34px;
+  }
+  .kicker b { color:var(--text); font-weight:600; }
+
+  /* ---------- readout (instrument strip) ---------- */
+  .readout {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    border:1px solid var(--line); background:var(--surface); border-radius:var(--r);
+    margin-top:52px; overflow:hidden;
+  }
+  .cell { padding:20px 22px; border-left:1px solid var(--line); }
+  .cell:first-child { border-left:0; }
+  .cell .n {
+    font-family:var(--mono); font-variant-numeric:tabular-nums;
+    font-size:1.85rem; font-weight:600; letter-spacing:-.02em; line-height:1.1;
+  }
+  .cell .l {
+    font-family:var(--mono); font-size:.64rem; letter-spacing:.13em;
+    text-transform:uppercase; color:var(--muted); margin-top:7px;
+  }
+
+  /* ---------- outcome grid ---------- */
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--r); }
+  .tile { background:var(--surface); padding:26px 24px; display:flex; flex-direction:column; gap:9px; }
+  .tile .t { font-family:var(--mono); font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--signal); }
+  .tile p { font-size:.94rem; color:var(--muted); line-height:1.6; }
+  .tile h3 { color:var(--text); }
+
+  /* ---------- the two theses ---------- */
+  .thesis { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); border-block:1px solid var(--line); }
+  @media (max-width:820px){ .thesis{ grid-template-columns:1fr; } }
+  .thesis > div { background:var(--bg); padding:34px 30px 34px 0; }
+  .thesis > div:last-child { padding-left:30px; }
+  @media (max-width:820px){ .thesis > div, .thesis > div:last-child { padding:28px 0; } }
+  .thesis .mode {
+    font-family:var(--mono); font-size:.66rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:14px;
+  }
+  .thesis .claim { font-size:1.3rem; font-weight:640; letter-spacing:-.02em; line-height:1.3; margin-bottom:12px; }
+  .thesis p { color:var(--muted); font-size:.95rem; }
+
+  /* ============================================================
+     MACHINE ROOM — the page inverts. This is the section break.
+     ============================================================ */
+  .deep {
+    background:var(--deep); color:#E4E9F0;
+    --surface:var(--deep-2); --line:#212A35; --line-strong:#33404F;
+    --text:#E4E9F0; --muted:#8B97A6; --signal:#E8A33D;
+    --ok:#4FB3A0; --gap:#D9903F; --crit:#E0645C;
+    border-top:0;
+  }
+  .deep-mark { padding:64px 0 0; }
+  .deep-mark .eyebrow { color:#8B97A6; }
+  .deep h2, .deep h3 { color:#F2F5F9; }
+
+  /* ---------- tables ---------- */
+  .tw { overflow-x:auto; border:1px solid var(--line); border-radius:var(--r); background:var(--surface); }
+  table { border-collapse:collapse; width:100%; font-size:.9rem; min-width:560px; }
+  th, td { text-align:left; padding:13px 16px; border-top:1px solid var(--line); vertical-align:top; }
+  thead th {
+    border-top:0; font-family:var(--mono); font-size:.63rem; letter-spacing:.13em;
+    text-transform:uppercase; color:var(--muted); font-weight:500; white-space:nowrap;
+  }
+  td code, .k {
+    font-family:var(--mono); font-size:.84em; color:var(--signal);
+    white-space:nowrap;
+  }
+  td .d { color:var(--muted); }
+
+  /* ---------- surfaces ---------- */
+  .surfaces { display:grid; grid-template-columns:repeat(auto-fill,minmax(238px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--r); }
+  .surf { background:var(--surface); padding:18px 18px 20px; display:flex; flex-direction:column; gap:6px; }
+  .surf .idx { font-family:var(--mono); font-size:.63rem; color:var(--muted); letter-spacing:.1em; }
+  .surf .nm  { font-family:var(--mono); font-size:.84rem; color:var(--signal); }
+  .surf .cost { font-size:.86rem; color:var(--muted); line-height:1.55; }
+
+  /* ---------- verdict chips ---------- */
+  .chip {
+    display:inline-flex; align-items:center; gap:.45em;
+    font-family:var(--mono); font-size:.68rem; letter-spacing:.08em; text-transform:uppercase;
+    padding:3px 9px; border-radius:999px; border:1px solid currentColor; white-space:nowrap;
+  }
+  .chip::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .chip.ok   { color:var(--ok); }
+  .chip.gap  { color:var(--gap); }
+  .chip.na   { color:var(--muted); }
+  .chip.flaky{ color:var(--crit); }
+
+  /* ---------- quorum diagram ---------- */
+  .quorum { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:6px; }
+  @media (max-width:640px){ .quorum{ grid-template-columns:1fr; } }
+  .judge {
+    border:1px dashed var(--line-strong); border-radius:var(--r);
+    padding:16px; background:var(--surface);
+  }
+  .judge .jn { font-family:var(--mono); font-size:.63rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+  .judge .sees { font-size:.85rem; color:var(--muted); margin-top:8px; line-height:1.55; }
+  .judge .sees b { color:var(--text); font-weight:600; }
+
+  .rule-box {
+    border-left:2px solid var(--signal); padding:4px 0 4px 20px; margin-top:8px;
+  }
+  .rule-box .r1 { font-size:1.05rem; font-weight:620; letter-spacing:-.015em; }
+  .rule-box p { color:var(--muted); font-size:.93rem; margin-top:6px; }
+
+  /* ---------- code ---------- */
+  pre {
+    margin:0; overflow-x:auto; background:var(--surface);
+    border:1px solid var(--line); border-radius:var(--r);
+    padding:16px 18px; font-family:var(--mono); font-size:.83rem; line-height:1.7;
+  }
+  pre .c { color:var(--muted); }
+  pre .a { color:var(--signal); }
+
+  /* ---------- flow ---------- */
+  .flow { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--r); }
+  .step { background:var(--surface); padding:16px 18px; display:grid; grid-template-columns:auto 1fr auto; gap:16px; align-items:center; }
+  @media (max-width:700px){ .step{ grid-template-columns:1fr; gap:8px; } }
+  .step .gapname { font-size:.92rem; }
+  .step .arrow { font-family:var(--mono); color:var(--muted); font-size:.8rem; }
+  .step .owner { font-family:var(--mono); font-size:.8rem; color:var(--signal); white-space:nowrap; }
+
+  /* ---------- footer ---------- */
+  footer { padding:56px 0 70px; border-top:1px solid var(--line); }
+  .links { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+  .btn {
+    font-family:var(--mono); font-size:.76rem; letter-spacing:.05em;
+    border:1px solid var(--line-strong); border-radius:var(--r);
+    padding:9px 14px; text-decoration:none; color:var(--text);
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .btn:hover { border-color:var(--signal); color:var(--signal); }
+  .btn.primary { border-color:var(--signal); color:var(--signal); }
+
+  .note {
+    font-size:.86rem; color:var(--muted); border-top:1px solid var(--line);
+    padding-top:18px; margin-top:10px; max-width:62ch;
+  }
+
+  @media (prefers-reduced-motion:no-preference) {
+    .reveal { opacity:0; transform:translateY(10px); transition:opacity .6s ease, transform .6s ease; }
+    .reveal.in { opacity:1; transform:none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================ NARRATIVE ============================ -->
+<div class="wrap rail">
+  <header class="hero">
+    <div class="kicker"><b>OLTREMATICA</b> &nbsp;/&nbsp; Claude Code skills &nbsp;/&nbsp; two tracks, one contract</div>
+    <div class="col">
+      <h1>Software that must be right, built by agents that <em>can't tell you</em> when they're wrong.</h1>
+    </div>
+    <p class="lede hero-sub muted">
+      Two things fail silently in an AI-native engineering organisation: the regulatory evidence
+      nobody has time to assemble, and the scaffolding the agents themselves run inside.
+      This is a catalogue of skills that makes both of them visible, testable, and routine.
+    </p>
+
+    <div class="readout" id="readout">
+      <div class="cell"><div class="n" data-n="7">7</div><div class="l">Skills</div></div>
+      <div class="cell"><div class="n" data-n="2">2</div><div class="l">Tracks</div></div>
+      <div class="cell"><div class="n" data-n="8">8</div><div class="l">Audit surfaces</div></div>
+      <div class="cell"><div class="n" data-n="121">121</div><div class="l">Automated checks</div></div>
+      <div class="cell"><div class="n" data-n="372">372</div><div class="l">Blind judgements</div></div>
+    </div>
+  </header>
+
+  <section>
+    <div class="stack">
+      <div class="eyebrow">The problem</div>
+      <div class="col stack-s">
+        <h2>Both failures are invisible until they are expensive.</h2>
+      </div>
+    </div>
+
+    <div class="thesis" style="margin-top:36px;">
+      <div>
+        <div class="mode">Failure mode 01</div>
+        <div class="claim">Compliance fails through friction.</div>
+        <p>
+          Nobody regenerates a software bill of materials mid-sprint. Nobody triages a CVE the week
+          a release ships. It is not ignorance — it is that the work is tedious and always
+          less urgent than the feature. So the evidence is assembled in a panic, months late,
+          by whoever is unlucky. The regulatory clock does not care: CRA
+          vulnerability-reporting obligations begin <b>11 September 2026</b>.
+        </p>
+      </div>
+      <div>
+        <div class="mode">Failure mode 02</div>
+        <div class="claim">The harness fails through invisibility.</div>
+        <p>
+          The instructions, skills and guardrails an agent works inside will rot, and nothing
+          will tell you. A <span class="k">CLAUDE.md</span> grows until the agent quietly stops obeying half of it.
+          A skill's trigger drifts until it fires on everything, or on nothing. There is no error
+          message and no alert. The agent simply gets worse — and the team concludes the model got worse.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="stack">
+      <div class="eyebrow">What changes</div>
+      <div class="col"><h2>Make the work produce its own evidence.</h2></div>
+      <p class="col muted" style="font-size:1.02rem;">
+        Not a policy, not a training course, not a quarterly audit. Seven skills that sit inside the
+        repositories where the work already happens, and do the tedious half automatically —
+        leaving humans the one job they are actually needed for: deciding.
+      </p>
+    </div>
+
+    <div class="grid2" style="margin-top:36px;">
+      <div class="tile">
+        <div class="t">Efficiency</div>
+        <h3>Cost becomes a decision, not an accident</h3>
+        <p>
+          Teams hit their usage limits before the day is done, and blame the model. The real cause is
+          almost always a session nobody cleaned. Routing work to the right model tier — and delegating
+          bulk reading to cheaper, isolated agents — becomes a written repository rule rather than
+          a matter of individual discipline.
+        </p>
+      </div>
+      <div class="tile">
+        <div class="t">Structure</div>
+        <h3>The scaffolding becomes an artifact</h3>
+        <p>
+          The agent setup in each repository stops being folklore that one person configured once and
+          nobody has touched since. It gets inventoried across eight surfaces and reported on, with
+          every gap named and assigned to whoever owns the fix.
+        </p>
+      </div>
+      <div class="tile">
+        <div class="t">Quality</div>
+        <h3>Claims are tested, not asserted</h3>
+        <p>
+          A skill nobody tested probably does not work — or worse, fires constantly and looks like it does.
+          Every trigger in this catalogue is put in front of independent blind reviewers, and a disagreement
+          between them is recorded as a defect rather than rounded away.
+        </p>
+      </div>
+      <div class="tile">
+        <div class="t">Predictability</div>
+        <h3>Junior work looks like senior work</h3>
+        <p>
+          The discipline a staff engineer applies by instinct — plan first, delegate the right thing,
+          verify before claiming done — stops depending on who happens to be at the keyboard.
+          It is encoded once, and applies to everyone.
+        </p>
+      </div>
+      <div class="tile">
+        <div class="t">Compliance</div>
+        <h3>Evidence, on demand, with a name on it</h3>
+        <p>
+          A bill of materials, a supply-chain diff, a vulnerability triage and a regulatory gap report,
+          generated in one invocation and handed to a human for approval. Draft by machine, approved by
+          person — with the approval recorded.
+        </p>
+      </div>
+      <div class="tile">
+        <div class="t">Governance</div>
+        <h3>Nothing marks its own homework</h3>
+        <p>
+          No artifact in this system is ever labelled <span class="k">Accepted</span>, <span class="k">Compliant</span>
+          or <span class="k">Validated</span> by the machine that produced it. Everything arrives as a draft.
+          A person decides. That is the whole contract, and it is not negotiable.
+        </p>
+      </div>
+    </div>
+
+    <p class="note">
+      Reported states are always <span class="chip ok">present</span> <span class="chip gap">gap</span>
+      <span class="chip na">not applicable</span> — each with a stated reason and a pointer to the evidence.
+      A bare “looks good” is treated as a bug, not a summary.
+    </p>
+  </section>
+</div>
+
+<!-- ============================ MACHINE ROOM ============================ -->
+<div class="deep">
+  <div class="wrap rail">
+    <div class="deep-mark">
+      <div class="eyebrow">Deep dive</div>
+    </div>
+
+    <section style="border-top:0; padding-top:26px;">
+      <div class="stack">
+        <div class="col"><h2>How it actually works.</h2></div>
+        <p class="col muted" style="font-size:1.02rem;">
+          Everything below is in the repository. Every number on this page was produced by running
+          something, not by asserting it.
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <div class="stack">
+        <div class="eyebrow">The catalogue</div>
+        <div class="col"><h2>Seven skills, two tracks.</h2></div>
+        <p class="col muted">
+          A skill is a folder Claude Code loads on demand: a procedure, plus the scripts and templates it needs.
+          It self-triggers from its own description — which means the description <em>is</em> the router, and is
+          the only thing seen at trigger time.
+        </p>
+      </div>
+
+      <div class="tw" style="margin-top:28px;">
+        <table>
+          <thead>
+            <tr><th>Skill</th><th>Track</th><th>Answers</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="k">harness-audit</span></td><td class="d">harness</td>
+              <td>What scaffolding does this repository give an agent, and what is missing? Inventories eight surfaces. <b>Entry point.</b></td>
+            </tr>
+            <tr>
+              <td><span class="k">claude-md-authoring</span></td><td class="d">harness</td>
+              <td>Is this <span class="k">CLAUDE.md</span> policy, or a skill in disguise? Diagnoses “the agent keeps ignoring X” — where the answer is almost never a stronger instruction.</td>
+            </tr>
+            <tr>
+              <td><span class="k">subagent-authoring</span></td><td class="d">harness</td>
+              <td>Should this be a skill, a subagent, a slash command, or a <b>hook</b>? The most common mistake is building a subagent where a hook was required.</td>
+            </tr>
+            <tr>
+              <td><span class="k">harness-eval</span></td><td class="d">harness</td>
+              <td>Does this skill actually fire? Did that change actually help?</td>
+            </tr>
+            <tr>
+              <td><span class="k">model-routing</span></td><td class="d">harness</td>
+              <td>Which model tier for which work — and why the usage limit runs out before the day does.</td>
+            </tr>
+            <tr>
+              <td><span class="k">cra-evidence</span></td><td class="d">compliance</td>
+              <td>Bill of materials, release-to-release supply-chain diff, vulnerability triage, CRA Annex&nbsp;I gap report, accessibility scan — assembled into one reviewable dossier.</td>
+            </tr>
+            <tr>
+              <td><span class="k">adr-management</span></td><td class="d">compliance</td>
+              <td>Why is the system like this? Drafts the decision record at the moment the decision is made, instead of never.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note">
+        Skills install <b>flat</b>, to <span class="k">.claude/skills/&lt;name&gt;/</span>. Claude Code knows nothing about
+        tracks — the track directories organise the source repository only, so nothing already installed anywhere breaks.
+      </p>
+    </section>
+
+    <section>
+      <div class="stack">
+        <div class="eyebrow">Surfaces</div>
+        <div class="col"><h2>The eight things a harness is made of.</h2></div>
+        <p class="col muted">
+          <span class="k">harness-audit</span> reads all eight from the filesystem and reports each as
+          present, gap, or not applicable. The script reports <em>facts only</em> — it never judges.
+          The judgement is the model's, and it must be argued.
+        </p>
+      </div>
+
+      <div class="surfaces" style="margin-top:28px;">
+        <div class="surf"><div class="idx">01</div><div class="nm">claude_md</div><div class="cost">Absent, or grown so long the agent silently drops half of it.</div></div>
+        <div class="surf"><div class="idx">02</div><div class="nm">skills</div><div class="cost">Procedures living as prose nobody loads, or a trigger so broad it fires on everything.</div></div>
+        <div class="surf"><div class="idx">03</div><div class="nm">agents</div><div class="cost">Bulk reading done in the main context, burning the window it needed for the actual task.</div></div>
+        <div class="surf"><div class="idx">04</div><div class="nm">hooks</div><div class="cost">Rules that must hold <em>every</em> time, written as instructions — so they hold most of the time.</div></div>
+        <div class="surf"><div class="idx">05</div><div class="nm">commands</div><div class="cost">The same prompt, pasted by hand, forever.</div></div>
+        <div class="surf"><div class="idx">06</div><div class="nm">mcp</div><div class="cost">External systems reached by improvised shell instead of a declared connection.</div></div>
+        <div class="surf"><div class="idx">07</div><div class="nm">verify_gate</div><div class="cost">No declared way to prove the work — so “done” means “it looked right”.</div></div>
+        <div class="surf"><div class="idx">08</div><div class="nm">model_routing</div><div class="cost">No policy, so everything defaults to the most expensive model, including the mechanical work.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="stack">
+        <div class="eyebrow">Composition</div>
+        <div class="col"><h2>The audit diagnoses. It does not fix.</h2></div>
+        <p class="col muted">
+          Every gap is handed to the skill that owns it — including out to Claude Code's own built-in skills.
+          One skill, one capability. Nothing chains silently through a repository rewriting it.
+        </p>
+      </div>
+
+      <div class="flow" style="margin-top:28px;">
+        <div class="step"><div class="gapname"><span class="chip gap">gap</span></div><div class="gapname">CLAUDE.md missing, bloated, or full of procedure</div><div class="owner">→ claude-md-authoring</div></div>
+        <div class="step"><div class="gapname"><span class="chip gap">gap</span></div><div class="gapname">Needs a subagent, a command, or a hook</div><div class="owner">→ subagent-authoring</div></div>
+        <div class="step"><div class="gapname"><span class="chip gap">gap</span></div><div class="gapname">A skill over- or under-triggers</div><div class="owner">→ harness-eval</div></div>
+        <div class="step"><div class="gapname"><span class="chip gap">gap</span></div><div class="gapname">No model-routing policy declared</div><div class="owner">→ model-routing</div></div>
+        <div class="step"><div class="gapname"><span class="chip gap">gap</span></div><div class="gapname">No verify gate</div><div class="owner">→ built-in <span class="k">verify</span></div></div>
+        <div class="step"><div class="gapname"><span class="chip gap">gap</span></div><div class="gapname">Hooks need wiring into settings.json</div><div class="owner">→ built-in <span class="k">update-config</span></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="stack">
+        <div class="eyebrow">The differentiator</div>
+        <div class="col"><h2>A skill you did not test probably does not fire.</h2></div>
+        <p class="col muted">
+          Or it fires on everything — which is worse, because it looks like it is working. Both failures are
+          invisible from the inside. So every skill's trigger is put in front of a quorum.
+        </p>
+      </div>
+
+      <div class="quorum" style="margin-top:30px;">
+        <div class="judge">
+          <div class="jn">Judge 01 · blind</div>
+          <div class="sees">Sees <b>only</b> the skill's description and <b>one</b> prompt. Never the skill body — because the body is invisible to the real router too.</div>
+        </div>
+        <div class="judge">
+          <div class="jn">Judge 02 · blind</div>
+          <div class="sees">Dispatched with <b>no tools</b>. A judge that can read the repository can look up the answer, and defeats the whole test <b>silently</b>.</div>
+        </div>
+        <div class="judge">
+          <div class="jn">Judge 03 · blind</div>
+          <div class="sees">One judge, one prompt, one vote. A judge shown the whole set calibrates — “about half of these must be triggers” — and inflates its own score.</div>
+        </div>
+      </div>
+
+      <div class="rule-box" style="margin-top:30px;">
+        <div class="r1">A split vote is <span class="chip flaky">flaky</span> — never rounded up to a pass.</div>
+        <p>
+          This is the rule the entire method rests on. Triggering is a probabilistic decision: a single judge
+          returns one sample of it and calls that evidence. Three judges can <em>disagree</em> — and the disagreement
+          is the finding. It is precisely what an ambiguous trigger looks like from the outside, and a lone reviewer
+          structurally cannot see it. The moment a 2-of-3 gets rounded into a pass to make a table look clean,
+          the exercise becomes theatre with a spreadsheet attached.
+        </p>
+      </div>
+
+      <p class="note" style="max-width:68ch;">
+        <b>372 blind judgements</b> to date; final state 52 of 52 rows unanimous. The ledger keeps the rounds that
+        <em>failed</em> — the split votes, the dissenting reasoning, and a “clean sweep” claim that was later found
+        false and retracted in place. The clean final number is not the interesting part of that file.
+        <b>The rounds before it are.</b>
+      </p>
+    </section>
+
+    <section>
+      <div class="stack">
+        <div class="eyebrow">Verification</div>
+        <div class="col"><h2>Tested against a repository built to be broken.</h2></div>
+        <p class="col muted">
+          An audit tool validated only against a healthy repository proves nothing. So the fixture is
+          <em>deliberately defective</em> — a bloated instruction file, no verify gate, no hooks, and a skill whose
+          description triggers on any prompt. The tooling has to catch all of it. Its README says, in as many words:
+          <em>do not fix these defects — they are the test.</em>
+        </p>
+      </div>
+
+      <pre style="margin-top:28px;"><span class="c"># 121 automated checks across three suites</span>
+tests/install.sh.test              <span class="a">PASS=32  FAIL=0</span>
+tests/harness/inventory.sh.test    <span class="a">PASS=35  FAIL=0</span>
+tests/harness/eval_run.py.test     <span class="a">PASS=54  FAIL=0</span></pre>
+    </section>
+
+    <section>
+      <div class="stack">
+        <div class="eyebrow">Install</div>
+        <div class="col"><h2>One command, per repository.</h2></div>
+      </div>
+      <pre style="margin-top:24px;">git clone https://github.com/Oltrematica/oltrematica-skills.git /tmp/os
+/tmp/os/scripts/install.sh harness-audit --to /path/to/your-repo
+
+<span class="c"># then, in that repo, simply say:</span>
+<span class="a">"audit our harness"</span></pre>
+      <p class="note">
+        The harness skills assume the Superpowers plugin is installed, and deliberately do not re-implement it.
+        Planning, test-driven development, debugging and code review are its territory. This catalogue adds what
+        it does not cover: what the harness is made of, and whether it works.
+      </p>
+    </section>
+
+    <footer>
+      <div class="stack-s">
+        <div class="eyebrow">The repository</div>
+        <h3 style="font-size:1.3rem;">Everything on this page is checked in.</h3>
+        <div class="links">
+          <a class="btn primary" href="https://github.com/Oltrematica/oltrematica-skills">Oltrematica&nbsp;/&nbsp;oltrematica-skills</a>
+          <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/blob/main/README.md">README</a>
+          <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/blob/main/tests/harness/trigger-validation.md">The evidence ledger</a>
+          <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/tree/main/skills/harness">Harness skills</a>
+          <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/tree/main/skills/compliance">Compliance skills</a>
+          <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/blob/main/docs/contributing-skills.md">House conventions</a>
+        </div>
+        <p class="note">
+          <b>Stated, rather than buried:</b> the quorum's sample size is small. It is a smoke test that catches gross
+          triggering failures. It is worth running because the alternative is <em>zero</em> evidence — not because it
+          is rigorous. The ledger says so too.
+        </p>
+        <p class="muted" style="font-size:.78rem; font-family:var(--mono); margin-top:26px;">
+          Proprietary · © 2026 Oltrematica · Claude drafts, humans approve
+        </p>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<script>
+  // Instrument readout settles on first view. Purely decorative; disabled for reduced motion.
+  (function () {
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var cells = document.querySelectorAll("#readout .n");
+    if (reduce || !("IntersectionObserver" in window)) return;
+
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var el = e.target;
+        var target = parseInt(el.getAttribute("data-n"), 10);
+        var dur = 520, t0 = performance.now();
+        function tick(now) {
+          var p = Math.min(1, (now - t0) / dur);
+          var eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = Math.round(target * eased);
+          if (p < 1) requestAnimationFrame(tick);
+          else el.textContent = target;
+        }
+        requestAnimationFrame(tick);
+        io.unobserve(el);
+      });
+    }, { threshold: 0.6 });
+
+    cells.forEach(function (c) { io.observe(c); });
+  })();
+
+  // Scroll reveal for the deep-dive sections.
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var els = document.querySelectorAll(".deep section, .grid2, .thesis");
+    els.forEach(function (el) { el.classList.add("reveal"); });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.08 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body>
+</html>
