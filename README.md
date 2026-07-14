@@ -1,17 +1,96 @@
 # Oltrematica Skills
 
-A two-track catalogue of Claude Code skills for the Oltrematica portfolio.
-Both tracks exist because a specific kind of failure was already happening
-before either was written, and neither failure announces itself.
+Claude Code skills for the Oltrematica portfolio: five skills that build,
+audit and test the Claude Code harness itself — stack-agnostic, useful in
+any repo — plus two skills that produce EU-regulatory compliance evidence
+(CRA, EAA).
 
-## What this is
+## The catalogue
 
-**Compliance track** (2 skills) produces and maintains regulatory evidence —
-SBOM, vulnerability triage, CRA Annex I gap reports, EAA/WCAG accessibility
-scans — and the decision records behind it. **Harness track** (5 skills)
-builds, audits and tests the Claude Code harness itself — the `CLAUDE.md`,
-skills, subagents, hooks, commands, MCP config, verify gate and model-routing
-policy every agent runs inside.
+| Skill | Track | What it's for |
+|---|---|---|
+| [`harness-audit`](skills/harness/harness-audit/) | Harness | Entry point — inventories the 8 harness surfaces, reports present/gap/not-applicable |
+| [`claude-md-authoring`](skills/harness/claude-md-authoring/) | Harness | Writes and repairs `CLAUDE.md` as policy, not procedure |
+| [`subagent-authoring`](skills/harness/subagent-authoring/) | Harness | Chooses skill vs. subagent vs. slash command vs. hook, then authors it |
+| [`harness-eval`](skills/harness/harness-eval/) | Harness | Proves a skill's trigger actually fires — or doesn't |
+| [`model-routing`](skills/harness/model-routing/) | Harness | Diagnoses usage-limit complaints, recommends model tier / subagent split |
+| Verification gate (Stop hook) | Harness — **plugin only** | Blocks a "done" claim when a source file changed after the last passing test run |
+| [`adr-management`](skills/compliance/adr-management/) | Compliance | Drafts Architecture Decision Records proactively for significant decisions |
+| [`cra-evidence`](skills/compliance/cra-evidence/) | Compliance | Generates and maintains the CRA/SBOM/EAA evidence package |
+
+**Harness track (5 skills + the verification gate) is stack-agnostic** — it
+applies to any repo, regardless of language or regulatory exposure.
+**Compliance track (2 skills) is EU-regulatory** — it exists for CRA and EAA
+obligations. If you don't ship software into the EU, the harness track is
+still fully for you; feel free to skip the other two.
+
+## Which stacks are supported
+
+`harness-audit`'s surface inventory and the verification gate's stack
+detection (`skills/harness/harness-audit/scripts/lib/verify_gate.sh`) work
+against any of: **PHP, Node (JS/TS), Python, Go, Rust, Ruby, Java/Kotlin,
+.NET, and Elixir**, plus a bare `Makefile test:` target. This is verified,
+not asserted — see the 137 checks in `tests/harness/verify_gate.sh.test`
+under [How this repo tests itself](#how-this-repo-tests-itself).
+
+## Install
+
+### Plugin (primary)
+
+```bash
+claude plugin marketplace add https://github.com/Oltrematica/oltrematica-skills.git
+claude plugin install oltrematica-skills@oltrematica
+```
+
+This is the only path that installs the Stop-hook verification gate
+alongside the seven skills. Default scope is `user` (every project on your
+machine); pass `--scope project` to commit it to the repo's own
+`.claude/settings.json` for the whole team.
+
+Verified live on this branch — added the marketplace from a local path,
+installed the plugin into a scratch project, then ran
+`claude plugin details oltrematica-skills@oltrematica`:
+
+```
+Skills (7)  adr-management, claude-md-authoring, cra-evidence, harness-audit,
+            harness-eval, model-routing, subagent-authoring
+Hooks (2)   PostToolUse, Stop
+```
+
+Full scope options, update commands, and the verification transcript (incl.
+the URL-form command, re-verified once this branch reaches `main`):
+[`docs/distribution.md`](docs/distribution.md). Before relying on the gate to
+block anything, read
+[what it does and does not guarantee](docs/harness/verification-gate.md).
+
+### `scripts/install.sh` (fallback — **skills only, no verification gate**)
+
+Use only if you cannot add a marketplace (offline CI runner, no outbound git
+access, policy blocks it). It copies skill directories as plain files; it
+cannot install hooks — the gate needs `${CLAUDE_PLUGIN_ROOT}`, which only the
+plugin loader sets, so a plain file copy has nothing for the hook scripts to
+attach to.
+
+```bash
+git clone https://github.com/Oltrematica/oltrematica-skills.git /tmp/os
+/tmp/os/scripts/install.sh <skill-name>... --to /path/to/your-repo
+```
+
+Run with no arguments to list every skill from both tracks. You can mix
+tracks in one invocation:
+
+```bash
+/tmp/os/scripts/install.sh adr-management cra-evidence harness-audit --to /path/to/your-repo
+```
+
+**Commit** `.claude/skills/` in a project so the whole team gets the skill on
+pull. **Verify:** restart Claude Code (or start a new session) in the target
+repo and run `/skills` — the installed skill should be listed.
+
+Full detail — personal scope, updating, the submodule option, why a plain
+copy is safe — in [`docs/distribution.md`](docs/distribution.md).
+
+## The contract
 
 One contract binds every skill in both tracks:
 
@@ -58,7 +137,10 @@ Put the two together and the shape of the repo is one idea, applied twice:
 Both tracks answer that by producing evidence instead of confidence, and by
 never letting Claude grade its own homework.
 
-## The catalogue
+## Skill reference
+
+The catalogue above, in detail: real trigger phrasing and what each skill
+produces.
 
 ### Compliance track
 
@@ -266,44 +348,6 @@ predating the harness track's quorum method. Read it as an earlier, less
 adversarial iteration of the same practice, not as evidence held to the same
 bar.
 
-## Install
-
-```bash
-git clone https://github.com/Oltrematica/oltrematica-skills.git /tmp/os
-/tmp/os/scripts/install.sh <skill-name>... --to /path/to/your-repo
-```
-
-Run with no arguments to list every skill from both tracks. Skills install
-**flat**, to `.claude/skills/<name>/` — Claude Code discovers skills by
-looking for `.claude/skills/<name>/SKILL.md` and knows nothing about tracks;
-the `skills/compliance/` and `skills/harness/` split exists only in this
-source repo, and does not appear in a target repo. You can mix tracks in one
-invocation:
-
-```bash
-/tmp/os/scripts/install.sh adr-management cra-evidence harness-audit --to /path/to/your-repo
-```
-
-Personal scope — install to your own machine rather than a shared repo — by
-targeting your home directory; the installer writes to `<target>/.claude/skills/`:
-
-```bash
-/tmp/os/scripts/install.sh adr-management --to ~
-```
-
-**Commit** `.claude/skills/` in a project so the whole team gets the skill on
-pull. **Verify:** restart Claude Code (or start a new session) in the target
-repo and run `/skills` — the installed skill should be listed.
-
-**Updating:** there is no version manifest or update command yet. `git pull`
-this repo, re-run `install.sh` for the skill (it replaces the existing
-directory), and review the diff before committing, same as any vendored
-code. `git log --oneline -- skills/<track>/<name>` shows one skill's history.
-
-Full detail — the submodule option, why a plain copy is safe (scripts either
-resolve their own directory or take every input as a CLI argument, never a
-third way) — in [`docs/distribution.md`](docs/distribution.md).
-
 ## Prerequisites
 
 | Skill / track | Needs |
@@ -345,7 +389,9 @@ copies of the same idea — not worth it for either track.
 |------|----------|
 | `skills/compliance/` | Compliance-track skills (`adr-management`, `cra-evidence`) |
 | `skills/harness/` | Harness-track skills (`harness-audit`, `claude-md-authoring`, `subagent-authoring`, `harness-eval`, `model-routing`) |
-| `scripts/install.sh` | The track-aware, flat-install installer used by every skill above |
+| `.claude-plugin/` | Marketplace and plugin manifests (`marketplace.json`, `plugin.json`) — the primary install path |
+| `hooks/` | The Stop-hook verification gate (`verify_before_done.sh`) and its PostToolUse activity recorder (`record_activity.sh`); shipped only via the plugin |
+| `scripts/install.sh` | The fallback, skills-only installer (no hooks) — see [Install](#install) |
 | `docs/harness/` | Harness track's brief and the verification-gate design doc |
 | `docs/distribution.md` | Install options in full: scope ladder, submodule option, updating, prerequisites |
 | `docs/contributing-skills.md` | House conventions for adding a skill to either track — short and binding |
