@@ -51,6 +51,7 @@ case "$TOOL" in
   Bash)
     CMD=$(field tool_input.command)
     [ -n "$CMD" ] || exit 0
+    IS_TEST=0
     if is_test_command "$CWD" "$CMD"; then
       # Why "passed" and not merely "ran": Claude Code documents PostToolUse
       # as firing only after a tool call SUCCEEDS, with a separate
@@ -70,6 +71,18 @@ case "$TOOL" in
       # dressed up as evidence is exactly what this repo exists to prevent.
       state_set "$SESSION" last_test_pass "$NOW"
       state_set "$SESSION" test_evidence "passed"
+      IS_TEST=1
+    fi
+    # FINDING 1 (adversarial review): a source edit made THROUGH Bash — `sed
+    # -i`, `cat > file`, a heredoc, `tee`, `cp`, `mv`, `patch`, `dd`,
+    # `install`, `truncate`, a `python3 -c` one-liner that writes — used to
+    # be invisible here, because only Write|Edit|NotebookEdit ever set
+    # last_source_edit. See lib/source_mutation.py for the detection and
+    # docs/harness/verification-gate.md for the residual gap this does not
+    # close (an exotic Bash mutation can still slip through a pure text
+    # heuristic — documented there, not just here).
+    if python3 "$SCRIPT_DIR/lib/source_mutation.py" "$CMD" "$IS_TEST" 2>/dev/null; then
+      state_set "$SESSION" last_source_edit "$NOW"
     fi
     ;;
   Write|Edit|NotebookEdit)

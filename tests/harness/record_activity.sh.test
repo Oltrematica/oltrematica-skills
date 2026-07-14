@@ -138,6 +138,80 @@ check "exit 0" "0" "$rc"
 check "last_source_edit set" "yes" \
   "$([ "$(state_get $S20 last_source_edit)" -gt 0 ] && echo yes || echo no)"
 
+echo "21. FINDING 1: sed -i (Bash-mediated) on a source file records last_source_edit"
+S21=rec-21
+rc=$(feed "{\"session_id\":\"$S21\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sed -i '' 's/hi/bye/' app/Foo2.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S21 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "22. FINDING 1: cat > file (Bash-mediated, plain redirect) records last_source_edit"
+S22=rec-22
+rc=$(feed "{\"session_id\":\"$S22\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > app/Foo3.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S22 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "23. FINDING 1: a heredoc into a source file records last_source_edit"
+S23=rec-23
+rc=$(feed "{\"session_id\":\"$S23\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > app/Foo4.php <<'EOF'\\nnew content\\nEOF\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S23 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "24. FINDING 1: echo hi > /tmp/x does NOT record (redirect target is /tmp)"
+S24=rec-24
+rc=$(feed "{\"session_id\":\"$S24\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi > /tmp/x\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S24 last_source_edit)"
+
+echo "25. FINDING 1: ls > /dev/null does NOT record"
+S25=rec-25
+rc=$(feed "{\"session_id\":\"$S25\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls > /dev/null\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S25 last_source_edit)"
+
+echo "26. FINDING 1: composer test 2>&1 | tee out.txt records a TEST PASS and does NOT record a source edit"
+S26=rec-26
+rc=$(feed "{\"session_id\":\"$S26\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"composer test 2>&1 | tee out.txt\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_test_pass set" "yes" \
+  "$([ "$(state_get $S26 last_test_pass)" -gt 0 ] && echo yes || echo no)"
+check "last_source_edit untouched" "0" "$(state_get $S26 last_source_edit)"
+
+echo "27. FINDING 1: perl -i (Bash-mediated) on a source file records last_source_edit"
+S27=rec-27
+rc=$(feed "{\"session_id\":\"$S27\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"perl -i -pe 's/hi/bye/' app/Foo5.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S27 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "28. FINDING 1: sed WITHOUT -i does NOT record (prints to stdout, does not touch disk)"
+S28=rec-28
+rc=$(feed "{\"session_id\":\"$S28\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sed 's/hi/bye/' app/Foo6.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S28 last_source_edit)"
+
+echo "29. FINDING 1: cp / mv / touch (Bash-mediated) record last_source_edit"
+S29=rec-29
+rc=$(feed "{\"session_id\":\"$S29\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cp app/Foo.php app/Foo7.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S29 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "30. FINDING 1: tee STANDALONE (no accompanying test command) records last_source_edit"
+S30=rec-30
+rc=$(feed "{\"session_id\":\"$S30\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi | tee app/Foo8.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S30 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "31. FINDING 1: a redirect into a .md file does NOT record (same source-file rule as Write/Edit)"
+S31=rec-31
+rc=$(feed "{\"session_id\":\"$S31\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > CHANGES.md\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S31 last_source_edit)"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

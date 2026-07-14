@@ -984,3 +984,225 @@ re-running `grep -c oltrematica ~/.claude/plugins/*.json` (all zero) and
 `find ~/.claude/plugins/cache -iname 'oltrematica*'` (no output). Both
 scratch project directories lived under this session's own scratchpad and
 were deleted with it, never under `~/`.
+
+## Final adversarial review — Finding 1 (CRITICAL): Bash-mediated source edits were invisible
+
+**The bug**: `record_activity.sh` recorded `last_source_edit` only for the
+`Write|Edit|NotebookEdit` tools. An agent that edits a file through Bash
+instead — `sed -i`, `cat > file`, a heredoc, `tee`, `cp`, `mv`, `patch`,
+`dd`, `install`, `truncate`, a `python3 -c` one-liner — left
+`last_source_edit` at `0`, which fired `verify_before_done.sh`'s own
+`[ "$LAST_EDIT" -eq 0 ] && exit 0` short-circuit before it ever compared
+timestamps. The gate did nothing on a very common path, silently.
+
+### Step 1: is `FileChanged` the right mechanism? Probed empirically, not assumed.
+
+`code.claude.com/docs/en/hooks.md` documents `FileChanged` as firing "when a
+watched file changes on disk." Two things stood out before writing any code:
+`FileChanged` has **no decision control** (side effects only — irrelevant
+here, since we only need it to set state, not block) and its `matcher` only
+accepts **literal exact filenames** (`letters, digits, _, |` — no
+wildcards), or an explicit `watchPaths` list returned from `SessionStart`.
+Neither form can express "any source file anywhere in an arbitrary repo" —
+already a strong signal this is the wrong mechanism architecturally, before
+even asking whether it fires reliably.
+
+Probed live anyway, per the task's explicit instruction to verify
+empirically rather than reason from the doc alone. A scratch dir
+(`mktemp -d`) got its own `.claude/settings.json` registering a `FileChanged`
+hook (`matcher: "foo.txt|bar.txt"`) dumping stdin to a capture file, plus a
+`PostToolUse` hook on the same two files as a live control. Never touched
+`~/.claude/settings.json`.
+
+**Run 1** — headless `claude -p` (`--allowedTools "Bash(sed:*) Edit"`, no
+`bypassPermissions` — that flag was explicitly denied by this session's own
+auto-mode classifier as an unauthorised capability, so `--allowedTools` was
+used instead) edited `src/foo.txt` via `sed -i ''` (Bash tool) and
+`src/bar.txt` via the Edit tool, in that order. Both files' content changed
+on disk (confirmed by `cat` afterward). `--debug hooks` log:
+
+```
+FileChanged: watching 2 paths
+...
+FileHistory: Tracked file modification for .../src/bar.txt   (Edit tool only)
+```
+
+`capture/filechanged.jsonl` did not exist — **zero `FileChanged` events**,
+for either the Bash-mediated edit or the Edit-tool edit. `capture/posttooluse.jsonl`
+had 2 lines (`Bash`, `Edit`) — the control hook worked, proving the probe's
+own registration was live and firing correctly for a different event type.
+
+**Run 2** — repeated with a `sleep 4` inserted after both edits (Bash tool,
+same allowlist) to rule out the CLI's headless process exiting before an
+async filesystem watcher could catch up. Same result: `filechanged.jsonl`
+still didn't exist; `posttooluse.jsonl` had 3 lines this time (`Bash`,
+`Edit`, `Bash` for the sleep). `FileHistory: Tracked file modification` was
+logged again for `bar.txt` (Edit tool) only, never for `foo.txt` (Bash).
+
+**Verdict**: `FileChanged`, as configured via a `matcher`, did not fire in
+two independent runs for either a Bash-mediated or an Edit-tool-mediated
+change to a matcher-declared file, with the control (`PostToolUse`) proving
+the harness and probe setup were both live. Combined with the doc-level
+architectural mismatch (no wildcard matching for "any source file"), this
+ruled out `FileChanged` and confirmed the brief's documented fallback route:
+detecting file-mutating Bash commands by their command-line shape.
+
+Probe cleanup: scratch dir removed (`rm -rf`); `~/.claude/settings.json`
+grep for the probe path returned no matches.
+
+### Step 2: the fallback — `hooks/scripts/lib/source_mutation.py`
+
+New module (Python stdlib only), reusing the exact technique
+`verify_gate.sh`'s `is_test_command` already proved: strip comments, split
+into shell segments on `;` `&&` `||` `|` `&` and newlines, skip leading
+env-var assignments and a single leading wrapper, then match on what the
+segment **starts with**. Unlike `is_test_command`, segment-splitting here
+tracks quote state (a single/double-quoted string is never split on an
+internal `;`/`|`/`&`) — a Bash one-liner that mutates a file is
+disproportionately likely to carry a control character inside a quoted
+script argument (`python3 -c "...;..."`), and a naive split would corrupt
+that argument and turn a real "does this write?" signal into a miss.
+
+Verbs recognized: `sed -i` / `perl -i` (gated on the `-i` flag actually
+being present — without it neither touches disk), `cp`, `mv`, `touch`,
+`patch`, `dd` (parses `of=`), `install`, `truncate` unconditionally, `tee`,
+and `python3 -c` one-liners whose script contains a write call
+(`open(...,'w'...)`, `.write(`, `.write_text(`, `.write_bytes(`,
+`shutil.copy`/`move`, `os.rename`). Also: any segment containing a real
+shell redirect into a file (`>`/`>>`/`&>`/`&>>`), excluding `N>&M` fd-merges
+(`2>&1`), `/dev/null`/`/dev/stdout`/`/dev/stderr`, and targets under
+`/tmp`/`/private/tmp`.
+
+**The `tee`-with-test-command carve-out, tested and justified**:
+`composer test 2>&1 | tee out.txt` must record a **test pass** and must
+**not** record a source edit — `tee` there is capturing the test run's own
+output, not editing source. Implemented as a narrow, explicit exemption:
+`tee` is only skipped as a mutation source when the **whole** original Bash
+command also matched `is_test_command`. `tee` used on its own, with no
+accompanying test command in the same invocation, still counts — it writes
+a file exactly as much as `cat > file` does. Verified both directions in
+`tests/harness/source_mutation.py.test`.
+
+Every candidate target path goes through the **same** source-file rule
+`record_activity.sh` already applies to Write/Edit/NotebookEdit paths (not
+`*.md`, not `LICENSE`, not under `docs/`). When a mutating command's shape
+is recognized but the exact target can't be pinned down (`patch`, a `dd`
+with no parseable `of=`, a `python3 -c` write whose filename isn't a simple
+string literal) — **the mutation is recorded anyway**. This is a deliberate
+policy, stated in the module's own docstring: a false "source changed" costs
+one unnecessary re-run of the tests; a false "nothing changed" is the exact
+hole this fix exists to close.
+
+### Step 3: RED, then GREEN
+
+**RED** — `tests/harness/record_activity.sh.test` cases 21–31 (the exact
+scenarios named in the task: `sed -i`, `cat > file`, a heredoc, `echo >
+/tmp/x`, `ls > /dev/null`, `composer test 2>&1 | tee out.txt`, plus `perl
+-i`, bare `sed` without `-i`, `cp`, standalone `tee`, and a redirect into a
+`.md` file) were added **before** `source_mutation.py` existed, run against
+the unmodified `record_activity.sh`:
+
+```
+$ /bin/bash tests/harness/record_activity.sh.test
+...
+21. FINDING 1: sed -i (Bash-mediated) on a source file records last_source_edit
+  PASS: exit 0
+  FAIL: last_source_edit set (expected 'yes', got 'no')
+22. FINDING 1: cat > file (Bash-mediated, plain redirect) records last_source_edit
+  FAIL: last_source_edit set (expected 'yes', got 'no')
+23. FINDING 1: a heredoc into a source file records last_source_edit
+  FAIL: last_source_edit set (expected 'yes', got 'no')
+27. FINDING 1: perl -i (Bash-mediated) on a source file records last_source_edit
+  FAIL: last_source_edit set (expected 'yes', got 'no')
+29. FINDING 1: cp / mv / touch (Bash-mediated) record last_source_edit
+  FAIL: last_source_edit set (expected 'yes', got 'no')
+30. FINDING 1: tee STANDALONE (no accompanying test command) records last_source_edit
+  FAIL: last_source_edit set (expected 'yes', got 'no')
+
+PASS=53 FAIL=6
+```
+
+Exactly the 6 "records" cases failed, for the right reason (the "does NOT
+record" cases already passed trivially against the unfixed code — the bug
+is a false negative by default, which happens to satisfy every negative
+assertion even before the fix). The 3 cases that already passed pre-fix
+(`echo > /tmp/x`, `ls > /dev/null`, `composer test | tee` not recording a
+source edit) are controls, not evidence of the fix — they document that the
+*negative* space was already correct by omission.
+
+**GREEN** — after `source_mutation.py` and the `record_activity.sh` wiring:
+
+```
+PASS=59 FAIL=0
+```
+
+A dedicated unit-level suite, `tests/harness/source_mutation.py.test` (40
+checks — unconditional mutators, the `sed`/`perl` `-i` gate, the `tee`
+carve-out in both directions, `python3 -c` write detection, redirect
+variants including `&>`, the shared source-file exclusion rule applied to
+Bash targets, negative controls, and adversarial/malformed input), also
+passes clean: `PASS=40 FAIL=0`. Two failures found and fixed during this
+suite's own development are worth recording honestly:
+
+1. A `python3 -c "from pathlib import Path; ...write_text(...)"` script
+   containing a literal `;` was shredded by a naive (non-quote-aware)
+   segment splitter, breaking the `-c` argument and causing a miss — this is
+   exactly why `_segments()` tracks quote state (see Step 2), unlike
+   `is_test_command`'s simpler splitter.
+2. An initial test assertion for `sed -i 'unterminated` (an unbalanced
+   quote) expected "no mutation" — wrong assertion, not a bug: the correct,
+   safe behavior for unparseable input is to record the mutation anyway
+   (fail-toward-recording), which is what the code already did. Fixed the
+   test's expectation, not the code.
+
+### Step 4: end-to-end proof — the real scripts, a real Bash-mediated edit, driving `tests/harness/fixtures/stale-tests/`
+
+Not hand-set state — `record_activity.sh` then `verify_before_done.sh`,
+talking through the real state file, with the edit made via `sed -i`
+instead of the Edit tool:
+
+```
+$ printf '{"session_id":"e2e-bash-mediated","cwd":".../stale-tests","tool_name":"Bash","tool_input":{"command":"composer test"},"tool_response":{}}' \
+    | bash hooks/scripts/record_activity.sh
+record_activity exit=0
+
+$ sleep 1
+
+$ printf '{"session_id":"e2e-bash-mediated","cwd":".../stale-tests","tool_name":"Bash","tool_input":{"command":"sed -i '''' s/x/y/ app/Invoice.php"},"tool_response":{}}' \
+    | bash hooks/scripts/record_activity.sh
+record_activity exit=0
+
+$ printf '{"session_id":"e2e-bash-mediated","cwd":".../stale-tests","stop_hook_active":false,"last_assistant_message":"Done. Fixed the invoice bug."}' \
+    | bash hooks/scripts/verify_before_done.sh
+```
+
+```
+Verification gate: you claimed this work is done, but the tests are stale.
+...
+verify_before_done exit=2
+```
+
+State file at the moment of the block:
+
+```
+{"last_test_pass": 1784042809, "test_evidence": "passed", "last_source_edit": 1784042810}
+```
+
+Before this fix, step 2 would have recorded nothing (`last_source_edit`
+stays `0`), and step 3 would have exited `0` (ALLOWED) via the Stop hook's
+own `[ "$LAST_EDIT" -eq 0 ] && exit 0` short-circuit — the exact silent
+bypass Finding 1 described, now closed and proven closed against the same
+fixture used for the original Edit-tool-mediated proof.
+
+### Residual limitation, documented for users, not just here
+
+Not every Bash mutation is guaranteed to be caught — an exotic wrapper
+script, a language runtime other than the ones matched, or a redirect
+buried inside a heredoc body that merely *resembles* one, can still slip
+past a text-shape heuristic that is deliberately not a full shell parser.
+This is written down for the people who install this gate, not left to live
+only here: see
+[`docs/harness/verification-gate.md`](../../docs/harness/verification-gate.md#what-it-does-not-catch),
+linked prominently from `docs/distribution.md` (Finding 2 of the same
+adversarial review — the fix for "the limitations are documented for
+engineers, not for users").

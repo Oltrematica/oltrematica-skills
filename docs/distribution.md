@@ -14,6 +14,9 @@ Three levels, increasing in reach:
    centrally. **This is the standard — use it unless you have a reason not
    to.** It is the only path that also ships the Stop-hook verification gate;
    see [Install (primary): plugin marketplace](#install-primary-plugin-marketplace).
+   Before you rely on it, read
+   **[What the verification gate does and does not guarantee](harness/verification-gate.md)**
+   — what it blocks, what can still slip past it, and why it fails open.
 
 ## Install (primary): plugin marketplace
 
@@ -70,6 +73,11 @@ the whole team gets it on pull, or `--scope local` to keep it out of git
 `Read hooks.json for plugin oltrematica-skills` and
 `Loading hooks from plugin: oltrematica-skills` — both are logged at session
 start. Full transcript in `tests/harness/notes.md`.
+
+**Before you rely on the gate to block anything, read
+[What the verification gate does and does not guarantee](harness/verification-gate.md).**
+It fails open by design, and there are real, named gaps in what it catches —
+know them going in.
 
 ## Fallback: `scripts/install.sh` (skills only)
 
