@@ -189,15 +189,38 @@ planned at the repo root. `claude plugin validate` rejects that layout —
 it lives at `.claude-plugin/plugin.json` instead. Verified by running the
 validator against both layouts, not assumed from a template.
 
-A known gap, also verified rather than assumed: the plugin's component
-inventory (`claude plugin details`) reports `Skills (0)`. The seven skills are
-present in the installed plugin bundle (`skills/compliance/...`,
-`skills/harness/...`), but Claude Code's default skill auto-discovery for
-plugins does not descend into the two-level `skills/<track>/<name>/` layout
-this repo uses for its own organization — see
-[Source layout vs. install layout](#source-layout-vs-install-layout). This
-does not affect the hooks, which are declared explicitly in `hooks/hooks.json`
-and load correctly regardless of skill discovery (confirmed in
-`tests/harness/notes.md`). Skills remain reachable in a plugin install via the
-`Skill` tool and are unaffected for `scripts/install.sh` installs, which copy
-by name and do not rely on this auto-discovery at all.
+A former gap, now fixed and verified live rather than assumed: the plugin's
+component inventory (`claude plugin details`) used to report `Skills (0)`.
+The seven skills are present in the installed plugin bundle
+(`skills/compliance/...`, `skills/harness/...`), but Claude Code's default
+skill auto-discovery for plugins only scans the flat `skills/<name>/`
+layout — it does not descend into the two-level `skills/<track>/<name>/`
+layout this repo uses for its own organization — see
+[Source layout vs. install layout](#source-layout-vs-install-layout).
+
+The fix: `.claude-plugin/plugin.json` declares the two track directories in
+the `skills` field, which the plugin reference documents as *adding to* (not
+replacing) the default `skills/` scan:
+
+```json
+"skills": ["./skills/compliance/", "./skills/harness/"]
+```
+
+Verified live: `claude plugin validate --strict .` passes, and installing
+the plugin into a scratch project and running
+`claude plugin details oltrematica-skills@oltrematica` now reports:
+
+```
+Skills (7)  adr-management, claude-md-authoring, cra-evidence, harness-audit,
+            harness-eval, model-routing, subagent-authoring
+```
+
+The hooks were re-verified unaffected: `Hooks (2)  PostToolUse, Stop` (the
+same three hook entries as `hooks/hooks.json`), and a live headless run
+against the scratch project confirmed `record_activity.sh` (PostToolUse) and
+`verify_before_done.sh` (Stop) both executed — each reached its `state_get`/
+`state_path` call, observable via the session-state directory being created
+under `~/.claude/plugins/data/oltrematica-skills-oltrematica/oltrematica-verify/`.
+Skills remain reachable in a plugin install via the `Skill` tool and are
+unaffected for `scripts/install.sh` installs, which copy by name and do not
+rely on this auto-discovery at all.

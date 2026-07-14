@@ -796,6 +796,50 @@ and the block/allow proof below confirms they fire regardless. Recorded
 honestly as a known gap in `docs/distribution.md`, not fixed by inventing an
 undocumented manifest field.
 
+**Update (2026-07-14, follow-up task): fixed.** The glob form
+(`"skills/compliance/*"`) tried above was rejected because it *is* a glob,
+not because the `skills` field itself is unsupported — the plugin reference
+(`https://code.claude.com/docs/en/plugins-reference.md`, "Path behavior
+rules") documents `skills` as accepting plain directory paths that must
+start with `./` and be relative to the plugin root, adding to (not
+replacing) the default `skills/` scan. Re-tried with directory paths instead
+of globs:
+
+```json
+"skills": ["./skills/compliance/", "./skills/harness/"]
+```
+
+`claude plugin validate --strict .` passes. Installed into a fresh scratch
+project (`mktemp -d`) via `claude plugin marketplace add` +
+`claude plugin install oltrematica-skills@oltrematica`, then:
+
+```
+$ claude plugin details oltrematica-skills@oltrematica
+oltrematica-skills 1.0.0
+  Oltrematica Claude Code skills: compliance evidence and harness engineering, plus the verification gate.
+  Source: oltrematica-skills@oltrematica
+
+Component inventory
+  Skills (7)  adr-management, claude-md-authoring, cra-evidence, harness-audit, harness-eval, model-routing, subagent-authoring
+  Agents (0)
+  Hooks (2)  PostToolUse, Stop  (harness-only — no model context cost)
+  MCP servers (0)
+  LSP servers (0)
+```
+
+All seven skills present, `Hooks (2) PostToolUse, Stop` unchanged from the
+`Skills (0)` run above — the manifest change did not touch hook wiring. A
+live headless run in the same scratch project (`claude -p "Run the bash
+command: echo hello-hook-test" --allowedTools "Bash(echo:*)"`) confirmed both
+hooks still execute post-fix: the session-state directory
+`~/.claude/plugins/data/oltrematica-skills-oltrematica/oltrematica-verify/`
+was (re-)created by `state_path`'s `mkdir -p`, reachable only if
+`record_activity.sh` (PostToolUse) and `verify_before_done.sh` (Stop) both
+ran and called into `state.sh`. The scratch project, the marketplace entry,
+and the plugin install were all removed afterward — nothing was left
+installed on the machine. `docs/distribution.md` updated to reflect the fix
+instead of the former "known gap."
+
 ### Step 4: the only proof that counts — a real session, real block
 
 Prompt sent via `claude -p "..." --permission-mode bypassPermissions --debug hooks --debug-file <path> --output-format json`, scratch repo with `composer.json`

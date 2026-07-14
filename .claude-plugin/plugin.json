@@ -2,5 +2,6 @@
   "name": "oltrematica-skills",
   "version": "1.0.0",
   "description": "Oltrematica Claude Code skills: compliance evidence and harness engineering, plus the verification gate.",
-  "author": { "name": "Oltrematica" }
+  "author": { "name": "Oltrematica" },
+  "skills": ["./skills/compliance/", "./skills/harness/"]
 }
