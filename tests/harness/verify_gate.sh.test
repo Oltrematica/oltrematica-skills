@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Contract test for lib/verify_gate.sh
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LIB="$ROOT/skills/harness/harness-audit/scripts/lib/verify_gate.sh"
+PASS=0; FAIL=0
+check(){ if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1));
+         else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi; }
+
+# shellcheck source=/dev/null
+. "$LIB" 2>/dev/null || { echo "  FAIL: cannot source $LIB"; echo "PASS=0 FAIL=1"; exit 1; }
+
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+
+field(){ detect_verify_gate "$1" | grep "^$2=" | cut -d= -f2-; }
+
+echo "1. composer.json with scripts.test"
+mkdir -p "$T/php"
+printf '{"scripts":{"test":"pest"}}' > "$T/php/composer.json"
+check "detected"  "true"                        "$(field "$T/php" detected)"
+check "source"    "composer.json scripts.test"  "$(field "$T/php" source)"
+check "command"   "composer test"               "$(field "$T/php" command)"
+
+echo "2. package.json with scripts.test"
+mkdir -p "$T/node"
+printf '{"scripts":{"test":"vitest run"}}' > "$T/node/package.json"
+check "detected" "true"           "$(field "$T/node" detected)"
+check "command"  "npm test"       "$(field "$T/node" command)"
+
+echo "3. Makefile test target"
+mkdir -p "$T/mk"; printf 'test:\n\techo hi\n' > "$T/mk/Makefile"
+check "detected" "true"        "$(field "$T/mk" detected)"
+check "command"  "make test"   "$(field "$T/mk" command)"
+
+echo "4. no gate at all"
+mkdir -p "$T/none"
+check "detected" "false" "$(field "$T/none" detected)"
+check "command"  ""      "$(field "$T/none" command)"
+
+echo "5. is_test_command recognises the declared command"
+is_test_command "$T/php" "composer test"; check "declared cmd" "0" "$?"
+
+echo "6. is_test_command recognises common equivalents in a PHP repo"
+is_test_command "$T/php" "php artisan test";             check "artisan test" "0" "$?"
+is_test_command "$T/php" "./vendor/bin/pest --filter=x"; check "pest"         "0" "$?"
+is_test_command "$T/php" "vendor/bin/phpunit";           check "phpunit"      "0" "$?"
+
+echo "7. is_test_command recognises node equivalents"
+is_test_command "$T/node" "npm test";       check "npm test" "0" "$?"
+is_test_command "$T/node" "npx vitest run"; check "vitest"   "0" "$?"
+
+echo "8. is_test_command REJECTS non-test commands (false positives are the danger)"
+is_test_command "$T/php" "git status";              check "git status"  "1" "$?"
+is_test_command "$T/php" "ls tests/";               check "ls tests/"   "1" "$?"
+is_test_command "$T/php" "cat tests/FooTest.php";   check "cat a test"  "1" "$?"
+is_test_command "$T/php" "echo 'run the tests'";    check "echo"        "1" "$?"
+
+echo "9. is_test_command REJECTS additional reader commands (ripgrep, wc, sed)"
+is_test_command "$T/php" "rg -l test tests/";       check "rg"          "1" "$?"
+is_test_command "$T/php" "wc -l tests/FooTest.php"; check "wc"          "1" "$?"
+is_test_command "$T/php" "sed -n '1,20p' tests/FooTest.php"; check "sed" "1" "$?"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
