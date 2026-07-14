@@ -1,0 +1,6 @@
+{
+  "name": "oltrematica/stale-tests-fixture",
+  "description": "Fixture: a repo with a declared test command. Test scenario — not a real project.",
+  "type": "project",
+  "scripts": { "test": "pest" }
+}

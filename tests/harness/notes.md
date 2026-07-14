@@ -477,3 +477,172 @@ state), atomic writes via `tempfile.mkstemp` + `os.replace` in the same
 directory, and session-id sanitisation (`tr -c 'A-Za-z0-9._-' '_'`) that keeps
 every state file inside `OLTREMATICA_STATE_DIR` regardless of input,
 confirmed against a literal `../../etc/passwd` session id.
+
+## Task 5: `verify_before_done.sh` — the Stop hook
+
+**Bug found in the brief's own sample `field()` helper (not copied):** the
+brief pipes `$PAYLOAD` into `python3 - "$1" <<'PY' ... PY`, i.e. a pipe AND a
+heredoc on the same command. The heredoc consumes stdin, so the piped payload
+never reaches Python — every field extraction silently returns empty. This
+was already diagnosed and fixed in `record_activity.sh` (Task 3): pass the
+payload as `argv[2]` instead of piping it. `verify_before_done.sh` reuses
+that exact pattern (see the `field()` comment in the script) rather than
+reinventing or copying the broken version.
+
+**RED** (`tests/harness/verify_before_done.sh.test` before the script
+existed — every check that shells out to the hook fails with exit 127):
+
+```
+1. THE CASE THAT MATTERS: claim + source edited after the tests passed -> BLOCK
+  FAIL: exit 2 (blocks) (expected '2', got '127')
+...
+PASS=3 FAIL=16
+```
+
+(3 passes were checks that don't depend on the script existing, e.g. "not
+exit 1" trivially holds when the command isn't found.)
+
+**GREEN** (final run, `/bin/bash tests/harness/verify_before_done.sh.test` —
+zsh is the login shell in this environment, so bash was invoked explicitly
+per the task brief's constraint):
+
+```
+1. THE CASE THAT MATTERS: claim + source edited after the tests passed -> BLOCK
+  PASS: exit 2 (blocks)
+2. exit code is 2, never 1 (exit 1 is NON-blocking in Claude Code)
+  PASS: not exit 1
+3. the block message tells the agent how to satisfy it
+  PASS: names the test command
+4. tests ran AFTER the edit -> allow
+  PASS: exit 0
+5. no completion claim -> allow (even with stale tests)
+  PASS: exit 0
+6. no source touched -> allow (docs-only turn)
+  PASS: exit 0
+7. LOOP GUARD: stop_hook_active -> stand down
+  PASS: exit 0
+8. FAIL OPEN: repo declares no test command -> allow, and warn
+  PASS: exit 0 (fails open)
+  PASS: warns about no gate
+9. FAIL OPEN: malformed stdin -> allow, no traceback
+  PASS: exit 0
+  PASS: no traceback
+10. no exit 1 ANYWHERE in the script (exit 1 is silently non-blocking)
+  PASS: no bare 'exit 1' in script
+11. claim present but NO source edit at all this session (fresh session) -> allow
+  PASS: exit 0
+12. tests fresh by exactly ONE second -> allow (boundary, not stale)
+  PASS: exit 0
+13. tests and edit at the SAME timestamp -> allow (>=, not strictly newer)
+  PASS: exit 0
+14. state that does not exist at all (never recorded this session) -> allow
+  PASS: exit 0
+15. cwd that does not exist on disk -> fails open, does not crash
+  PASS: exit 0 (fails open)
+16. huge last_assistant_message does not crash the hook
+  PASS: exit 2 (still blocks correctly)
+17. stop_hook_active as JSON boolean true (unquoted) also stands down
+  PASS: exit 0
+
+PASS=19 FAIL=0
+```
+
+Beyond the brief's 9 checks: checks 10-17 cover no-`exit 1` static
+verification, a claim with no source edit at all (fresh session, defaults),
+a one-second-fresh boundary, an equal-timestamp boundary (`>=`, not strict
+`>`), a session id never seen by `state_set`, a nonexistent `cwd`, a ~100KB
+`last_assistant_message`, and `stop_hook_active` arriving as an unquoted
+JSON `true` (as opposed to the brief's string case).
+
+**End-to-end fixture run** — driving the ACTUAL scripts
+(`record_activity.sh` then `verify_before_done.sh`) through
+`tests/harness/fixtures/stale-tests/`, not hand-set state:
+
+```
+$ F="$PWD/tests/harness/fixtures/stale-tests"
+$ export OLTREMATICA_STATE_DIR=$(mktemp -d)
+$ S=e2e-1
+
+# 1. tests run and pass
+$ printf '{"session_id":"e2e-1","cwd":"'"$F"'","tool_name":"Bash","tool_input":{"command":"composer test"},"tool_response":{}}' \
+    | bash hooks/scripts/record_activity.sh
+record_activity exit=0
+
+$ sleep 1
+
+# 2. source file edited
+$ printf '{"session_id":"e2e-1","cwd":"'"$F"'","tool_name":"Edit","tool_input":{"file_path":"'"$F"'/app/Invoice.php"},"tool_response":{}}' \
+    | bash hooks/scripts/record_activity.sh
+record_activity exit=0
+
+# 3. agent claims done
+$ printf '{"session_id":"e2e-1","cwd":"'"$F"'","stop_hook_active":false,"last_assistant_message":"Done. Fixed the invoice bug."}' \
+    | bash hooks/scripts/verify_before_done.sh
+```
+
+stderr (the actual block message the model sees):
+
+```
+Verification gate: you claimed this work is done, but the tests are stale.
+
+A source file was modified after the last test run, so the last green result
+does not describe the code you are about to hand over.
+
+Run the test suite and report the actual output:
+
+    composer test
+
+If it passes, say so and finish. If it fails, fix it. Do not restate that the
+work is complete without running it.
+```
+
+Exit code:
+
+```
+exit=2  (MUST be 2)
+```
+
+State file at the moment of the block:
+
+```
+{"last_test_pass": 1784038367, "test_evidence": "passed", "last_source_edit": 1784038368}
+```
+
+`last_test_pass` is exactly 1 second before `last_source_edit`, confirming
+the `sleep 1` produced an unambiguous ordering and the recorder and the Stop
+hook agree on what happened — this was not hand-set state, it is the two
+real scripts talking to each other through the real state file.
+
+**No `exit 1` anywhere** — every `exit` in `verify_before_done.sh` is
+`exit 0` or `exit 2` (confirmed by `grep -n exit hooks/scripts/verify_before_done.sh`
+and by check #10 in the test file, which greps the script itself):
+
+```
+21:. "$SCRIPT_DIR/lib/state.sh" 2>/dev/null || exit 0
+23:. "$GATE_LIB" 2>/dev/null || exit 0
+26:[ -n "$PAYLOAD" ] || exit 0
+51:  true|True) exit 0 ;;
+54:SESSION=$(field session_id); [ -n "$SESSION" ] || exit 0
+64:case "$LAST_EDIT" in ''|*[!0-9]*) exit 0 ;; esac
+65:case "$LAST_TEST" in ''|*[!0-9]*) exit 0 ;; esac
+68:[ "$LAST_EDIT" -eq 0 ] && exit 0
+71:printf '%s' "$MSG" | python3 "$SCRIPT_DIR/lib/claims.py" || exit 0
+74:[ "$LAST_TEST" -ge "$LAST_EDIT" ] && exit 0
+83:  exit 0
+100:exit 2
+```
+
+(Lines 39/42 are `sys.exit(0)` inside an embedded Python heredoc, not bash
+exits, and are also 0.)
+
+**Deviation from the brief's script noted, not just the `field()` fix**: the
+brief's version does `[ "$LAST_EDIT" -eq 0 ] 2>/dev/null && exit 0` directly
+against `state_get`'s output without first validating it is numeric — if
+`state_get` ever returned a non-numeric string (e.g. from a hand-corrupted
+state file), `-eq` would print a bash error to stderr and the pipeline's
+`&&` short-circuit means the script would fall through to the comparisons
+below rather than failing open cleanly. `verify_before_done.sh` adds an
+explicit numeric-guard (`case ... in ''|*[!0-9]*) exit 0 ;; esac`) on both
+`LAST_EDIT` and `LAST_TEST` before any arithmetic comparison, so a corrupt
+or non-numeric state value fails open immediately instead of relying on
+`-eq`'s error behaviour under `set -uo pipefail`.
