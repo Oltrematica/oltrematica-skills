@@ -3,3 +3,7 @@ tests/compliance/fixtures/*/compliance/
 node_modules/
 mail.md
  
+# internal scratch: SDD task briefs, reports, review diffs.
+# Must be in the TRACKED gitignore — .git/info/exclude is per-clone and does
+# not travel to contributors.
+.superpowers/
