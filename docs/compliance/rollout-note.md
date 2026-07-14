@@ -16,7 +16,7 @@ cp -R /tmp/ocs/skills/cra-evidence  /path/to/repo/.claude/skills/cra-evidence
 cp -R /tmp/ocs/skills/adr-management /path/to/repo/.claude/skills/adr-management
 ```
 
-Full options in [`docs/distribution.md`](distribution.md).
+Full options in [`docs/distribution.md`](../distribution.md).
 
 ## What changes for you, as a repo owner
 
