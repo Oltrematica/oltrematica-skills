@@ -59,13 +59,36 @@ scripts/eval_run.py --validate .claude/eval_spec.json
 
 ### 2. Judge each prompt with a quorum of fresh, blind subagents
 
-Dispatch **three independent subagents per prompt** — a quorum, not a judge. Each
-is given the skill's `description:` text and the prompt, and asked exactly one
-thing:
+Dispatch **three independent subagents per prompt** — a quorum, not a judge. Two
+constraints are non-negotiable. Break either one and nothing looks wrong: the
+table still fills in, the pass rate still looks great, and the evidence is
+worthless.
+
+- **MUST: no tools.** Dispatch each judge with no filesystem or search access —
+  no `Read`, `Grep`, `Glob`, nothing. A judge that can open the real SKILL.md body,
+  or the repo it lives in, is not judging the description; it is grading against
+  material the real router never sees at trigger time. It needs no tools, because
+  everything it may legitimately see — one description, one prompt — is handed to
+  it directly in its dispatch prompt. A judge that can read the repo is not a
+  judge, it is a cheat, and it produces evidence that is confident and wrong.
+  **Verify:** check the subagent's tool list before dispatch; if it is non-empty,
+  the run is void, not merely suspect.
+- **MUST: one judge, one prompt.** Never hand a judge more than one prompt from
+  the spec, even though batching is ten times cheaper. A judge holding all of a
+  skill's prompts at once can calibrate ("roughly half of these must be
+  triggers") and reason by elimination; the real router sees one utterance at a
+  time with no set to compare it against, so a judge holding the set has an
+  advantage the router never has, and the pass rate inflates accordingly.
+  **Verify:** count the dispatches — for N prompts × 3 judges there must be 3N
+  separate subagent calls, each with exactly one prompt in its context.
+
+Each judge is given the skill's `description:` text and the one prompt, and asked
+exactly one thing:
 
 > Given ONLY this skill description and this user prompt, would this skill be
 > invoked? Answer `trigger` or `no-trigger`, then one sentence of reasoning.
-> Judge the description alone — you have no access to the skill body.
+> Judge the description alone — you have no access to the skill body, no tools,
+> and no other prompts from this spec.
 
 Two things make this adversarial rather than decorative:
 
@@ -164,3 +187,13 @@ harness *works*. For that: pin the behavior, change the harness, compare.
   a table attached.
 - **Never mark a skill "validated".** Report the rows and the splits. The human
   reads the table and decides.
+- **A judge with tools is not a judge.** If you catch yourself giving a judge
+  `Read`/`Grep`/`Glob` "just to double-check something," stop — that is not
+  double-checking, it is handing the exam answers to the student before the
+  exam. Verify before you trust any result: was every dispatch made with zero
+  tools? If not, the result is void, not just weaker.
+- **One judge, one prompt, no exceptions.** Batching all of a skill's prompts
+  into one judge call is cheaper and it is also cheating: it hands the judge a
+  set to calibrate against that the real router never has. Verify before you
+  trust any result: were there 3N separate dispatches for N prompts, each
+  holding exactly one prompt?
