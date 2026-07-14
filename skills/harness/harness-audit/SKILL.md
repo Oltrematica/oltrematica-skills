@@ -57,6 +57,17 @@ Returns JSON with eight keys: `claude_md`, `skills`, `agents`, `hooks`,
 `commands`, `mcp`, `verify_gate`, `model_routing`. If the script cannot run,
 say so and stop — do not fall back to guessing.
 
+**Sanity-check before you classify.** `inventory.sh` only looks in the
+locations a *consumer* repo uses (root `CLAUDE.md`, `.claude/skills/`,
+`.claude/agents/`, etc.) — that is correct for a repo that installs and runs
+a harness, but wrong for a skills-*source* repo, where skills live at
+`skills/<name>/` or `skills/<track>/<name>/` and there is often no root
+`CLAUDE.md` at all. If the inventory comes back empty or near-empty on every
+surface, **stop before writing "all gaps"** and check whether you are looking
+at a skills-source or plugin repo rather than a consumer repo. An all-zeros
+inventory is more often a mis-targeted audit than a genuinely empty harness —
+reporting "all gaps" without that check is how this skill embarrasses itself.
+
 ### 2. Classify each surface
 
 | Surface | Present when | Gap when | Typically N/A when |
