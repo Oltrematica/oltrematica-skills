@@ -61,6 +61,8 @@ def _normalize(text: str) -> str:
 
     - Fenced code blocks are quoted text, not an assertion by the author —
       drop them entirely so an example ("```\\nDone.\\n```") never counts.
+    - Blockquote lines are quoted text, not an assertion by the author — drop
+      them so a message quoting "Done" never counts.
     - Markdown emphasis markers (**bold**, __bold__, *em*) are stripped so a
       formatted claim ("**Done.**") still reads as sentence-initial.
     - Leading list/checkbox markers ("- [x] ", "* ", "1. ") are stripped from
@@ -68,6 +70,7 @@ def _normalize(text: str) -> str:
       reads as sentence-initial.
     """
     text = re.sub(r"```.*?```", " ", text, flags=re.S)
+    text = re.sub(r"(?m)^[ \t]*>.*$", " ", text)
     text = re.sub(r"[*_]{1,3}", "", text)
     text = re.sub(r"(?m)^[ \t]*(?:[-*+]|\d+\.)\s+(?:\[[ xX]\]\s*)?", "", text)
     return text

@@ -59,6 +59,18 @@ echo "-- extra: a claim inside a code fence is quoted text, not an assertion --"
 FENCED=$'Here is an example of what NOT to do:\n\n```\nDone. All tests pass.\n```\n\nI haven\'t actually started fixing this yet.'
 no_ "$FENCED"
 
+echo "-- extra: blockquote lines are quoted text, not an assertion --"
+BQ_ONLY=$'The user said:\n> Done. All tests pass.\nBut that is not accurate—I have not tested it.'
+no_ "$BQ_ONLY"
+
+echo "-- extra: blockquote with unrelated text, real claim outside --"
+BQ_PLUS_CLAIM=$'The user said:\n> This is wrong.\nI disagree. Done.'
+yes_ "$BQ_PLUS_CLAIM"
+
+echo "-- extra: inline > (comparison operator) with real claim --"
+INLINE_GT=$'The condition is if (a > b) then proceed. Done.'
+yes_ "$INLINE_GT"
+
 echo "-- extra: hedged claim (flagged ambiguous in the report; judged no_ here) --"
 no_ "I think this is done, but I'm not 100% sure."
 
