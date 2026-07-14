@@ -112,6 +112,32 @@ check "exit 0" "0" "$rc"
 check "last_source_edit set" "yes" \
   "$([ "$(state_get $S16 last_source_edit)" -gt 0 ] && echo yes || echo no)"
 
+echo "17. top-level relative docs/ path is exempt"
+S17=rec-17
+rc=$(feed "{\"session_id\":\"$S17\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"docs/nested/deep/x.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S17 last_source_edit)"
+
+echo "18. top-level relative docs/ with markdown is also exempt"
+S18=rec-18
+rc=$(feed "{\"session_id\":\"$S18\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"docs/guide.md\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S18 last_source_edit)"
+
+echo "19. file with docs in name but not as path segment is still source"
+S19=rec-19
+rc=$(feed "{\"session_id\":\"$S19\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"app/docs-helper.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S19 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "20. control: normal app source is recorded"
+S20=rec-20
+rc=$(feed "{\"session_id\":\"$S20\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"app/Foo.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S20 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -77,7 +77,7 @@ case "$TOOL" in
     [ -n "$FP" ] || exit 0
     case "$FP" in
       *.md|*/LICENSE|LICENSE) exit 0 ;;
-      */docs/*)               exit 0 ;;
+      */docs/*|docs/*)        exit 0 ;;
     esac
     state_set "$SESSION" last_source_edit "$NOW"
     ;;
