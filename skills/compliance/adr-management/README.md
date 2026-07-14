@@ -60,5 +60,5 @@ You can also trigger it directly: "document this decision", "why did we choose X
 
 ## License
 
-Proprietary — Copyright © 2026 Oltrematica. All rights reserved. See the
-repository [LICENSE](../../../LICENSE).
+MIT — Copyright © 2026 Oltrematica. See the repository
+[LICENSE](../../../LICENSE).

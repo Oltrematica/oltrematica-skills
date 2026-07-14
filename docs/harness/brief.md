@@ -34,9 +34,9 @@ author deliberately, and — the part nobody does — **test**.
 `CLAUDE.md`, skills, subagents, hooks, slash commands, MCP, the verify gate, and
 model routing policy — and hands each gap to the skill that owns the fix.
 
-`model-routing` was added mid-plan, at the client's request, after the first four
-skills were already in review: teams kept hitting the five-hour usage limit and
-assumed the fix was model choice. It usually isn't — see the rollout note.
+`model-routing` was added mid-plan, after the first four skills were already in
+review: teams kept hitting the five-hour usage limit and assumed the fix was
+model choice. It usually isn't.
 
 ## Dependency: Superpowers
 

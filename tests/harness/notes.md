@@ -299,7 +299,7 @@ confirms both ran (`Bash` tool used twice, second with `Exit code 1`):
 ```json
 {
   "session_id": "9ff2b914-bd8a-48ca-8d5d-6f663a03f19e",
-  "transcript_path": "/Users/andreamargiovanni/.claude/projects/-private-tmp-hookprobe-scratch-8DGsKB/9ff2b914-bd8a-48ca-8d5d-6f663a03f19e.jsonl",
+  "transcript_path": "/Users/dev/.claude/projects/-private-tmp-hookprobe-scratch-8DGsKB/9ff2b914-bd8a-48ca-8d5d-6f663a03f19e.jsonl",
   "cwd": "/private/tmp/hookprobe-scratch.8DGsKB",
   "prompt_id": "a4a1d397-67c9-4e94-a1d3-f3b47bb5e57b",
   "permission_mode": "bypassPermissions",
@@ -696,7 +696,7 @@ Final validation, strict, against the real repo:
 
 ```
 $ claude plugin validate .
-Validating marketplace manifest: /Users/andreamargiovanni/dev/skills/oltrematica-compliance-skills/.claude-plugin/marketplace.json
+Validating marketplace manifest: /Users/dev/skills/oltrematica-compliance-skills/.claude-plugin/marketplace.json
 
 ✔ Validation passed
 ```
@@ -721,7 +721,7 @@ $ cat "$SCRATCH/.claude/settings.local.json"
 {
   "extraKnownMarketplaces": {
     "oltrematica": {
-      "source": { "source": "directory", "path": "/Users/andreamargiovanni/dev/skills/oltrematica-compliance-skills" }
+      "source": { "source": "directory", "path": "/Users/dev/skills/oltrematica-compliance-skills" }
     }
   }
 }
@@ -750,7 +750,7 @@ instead and grepped the resulting log, which is the platform's own internal
 plugin/hook loader talking, not a claim from the model:
 
 ```
-2026-07-14T14:29:17.846Z [DEBUG] Read hooks.json for plugin oltrematica-skills (enabled=true): /Users/andreamargiovanni/dev/skills/oltrematica-compliance-skills/hooks/hooks.json
+2026-07-14T14:29:17.846Z [DEBUG] Read hooks.json for plugin oltrematica-skills (enabled=true): /Users/dev/skills/oltrematica-compliance-skills/hooks/hooks.json
 2026-07-14T14:29:17.851Z [DEBUG] Loading hooks from plugin: oltrematica-skills
 2026-07-14T14:29:17.851Z [DEBUG] Registered 4 hooks from 4 plugins
 ```

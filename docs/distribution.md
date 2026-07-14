@@ -27,8 +27,8 @@ centrally instead of re-copied per repo.
 
 **Why this is primary, not `scripts/install.sh`:** hooks live in
 `settings.json`, and the only alternative to a plugin is editing that file by
-hand in every one of the ~190 repos this could reach, then re-merging it by
-hand on every update. Plugin hooks merge automatically across scopes —
+hand in every repo this could reach, then re-merging it by hand on every
+update. Plugin hooks merge automatically across scopes —
 nothing in a repo's own `settings.json` has to change. That's a functional
 difference, not a packaging preference: `scripts/install.sh` cannot deliver
 hooks at all (see [Fallback](#fallback-scriptsinstallsh-skills-only) below).
@@ -180,13 +180,11 @@ brew install syft grype
 
 ## History: plugin conversion
 
-The repo shipped as a plain skills repo at first — no plugin marketplace
-(decided 2026-07-09, rationale in
-[the compliance repo design spec](superpowers/specs/2026-07-09-compliance-skills-repo-design.md))
-— because at that point there was nothing a plugin needed to deliver beyond a
+The repo shipped as a plain skills repo at first — no plugin marketplace —
+because at that point there was nothing a plugin needed to deliver beyond a
 file copy. That changed once the Stop-hook verification gate
 (`hooks/scripts/verify_before_done.sh`) needed a mechanism `settings.json`
-alone can't provide across ~190 repos: automatic hook merging. The plugin
+alone can't provide across many repos at once: automatic hook merging. The plugin
 (`.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json`,
 `hooks/hooks.json`) was built for that reason and is now the primary install
 path — see [Install (primary): plugin marketplace](#install-primary-plugin-marketplace).

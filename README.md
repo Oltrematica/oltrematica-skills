@@ -67,8 +67,6 @@ never letting Claude grade its own homework.
 | [`adr-management`](skills/compliance/adr-management/) | Drafts Architecture Decision Records proactively whenever a significant decision is made, discussed or discovered — the human only reviews. | "document this decision", "why did we choose X", choosing/replacing a library or framework, a DB or auth strategy, an infra change, a breaking change or deprecation — even if nobody says "ADR" | `docs/adr/NNNN-slug.md`, status `Proposed`, plus an updated index |
 | [`cra-evidence`](skills/compliance/cra-evidence/) | Generates and maintains the CRA/SBOM/EAA evidence package: SBOM, release-to-release SBOM diff, vulnerability scan and triage drafts, Annex I gap report, EAA/WCAG accessibility module. | "prepare the release", "cut v2.3", "are we CRA ready?", "check our dependencies", "any known CVEs?", "generate an SBOM", accessibility/EAA/WCOG/a11y requests | `compliance/COMPLIANCE.md` dossier, `compliance/sbom/`, `compliance/vulns/*.md`, `compliance/a11y/` |
 
-Background: [`docs/compliance/development-brief.md`](docs/compliance/development-brief.md).
-
 ### Harness track
 
 | Skill | What it does | Triggers on (real phrasing) | Produces |
@@ -319,11 +317,9 @@ copies of the same idea — not worth it for either track.
 | `skills/compliance/` | Compliance-track skills (`adr-management`, `cra-evidence`) |
 | `skills/harness/` | Harness-track skills (`harness-audit`, `claude-md-authoring`, `subagent-authoring`, `harness-eval`, `model-routing`) |
 | `scripts/install.sh` | The track-aware, flat-install installer used by every skill above |
-| `docs/compliance/` | Compliance track's development brief, rollout note, and Phase-3 CI-gate proposal (design only, nothing wired in) |
-| `docs/harness/` | Harness track's brief and rollout note |
+| `docs/harness/` | Harness track's brief and the verification-gate design doc |
 | `docs/distribution.md` | Install options in full: scope ladder, submodule option, updating, prerequisites |
 | `docs/contributing-skills.md` | House conventions for adding a skill to either track — short and binding |
-| `docs/superpowers/plans/`, `docs/superpowers/specs/` | This repo's own planning and design artifacts — how the compliance and harness tracks were themselves planned and specced, using Superpowers' own workflow |
 | `tests/install.sh.test` | Installer behavior — 32 checks |
 | `tests/harness/inventory.sh.test`, `tests/harness/eval_run.py.test` | Harness-tooling behavior — 35 + 54 checks |
 | `tests/harness/trigger-validation.md` | The blind, 3-judge quorum ledger for all 5 harness skills |
@@ -352,5 +348,4 @@ is short and it is binding. The rules that actually bite:
 
 ## License
 
-Proprietary — Copyright © 2026 Oltrematica. All rights reserved. See
-[LICENSE](LICENSE).
+MIT — Copyright © 2026 Oltrematica. See [LICENSE](LICENSE).

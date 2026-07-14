@@ -1,6 +1,6 @@
 # CRA Annex I — Essential Requirements Checklist
 
-> **DRAFT — pending review by Andrea Margiovanni + external counsel.
+> **DRAFT — pending review by a qualified engineer and external legal counsel.
 > Not authoritative until that review is recorded here.**
 > Source: Regulation (EU) 2024/2847, Annex I (Parts I and II), rephrased as
 > verifiable checks. `[repo]` = provable from the repository; `[org]` =
@@ -92,4 +92,4 @@ Gap-report rule (W3): every item below receives exactly one state —
 
 | Date | Reviewer | Outcome |
 |------|----------|---------|
-| — | pending (Andrea + external counsel) | — |
+| — | pending (engineering + external counsel) | — |
