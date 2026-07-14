@@ -108,7 +108,7 @@ This skill diagnoses. It does not author.
 | No model routing policy declared | `model-routing` |
 
 Propose the handoffs in priority order and let the human pick. Do not silently
-chain into four skills and rewrite the repo.
+chain through the handoffs and rewrite the repo.
 
 ## Bootstrap mode (empty harness)
 
