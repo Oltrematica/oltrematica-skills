@@ -22,6 +22,7 @@ No surface is silently skipped, and none is marked simply "good".
 | Slash commands (`.claude/commands/`) | | |
 | MCP servers (`.mcp.json`) | | |
 | Verify gate | | |
+| Model routing policy | | |
 
 ## Recommended actions
 
