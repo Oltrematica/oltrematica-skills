@@ -1,0 +1,12 @@
+{
+  "name": "oltrematica",
+  "owner": { "name": "Oltrematica" },
+  "description": "Oltrematica Claude Code plugins: compliance evidence, harness engineering, and the verification gate.",
+  "plugins": [
+    {
+      "name": "oltrematica-skills",
+      "source": "./",
+      "description": "Seven skills across two tracks, plus a Stop hook that blocks a done-claim when the tests are stale."
+    }
+  ]
+}

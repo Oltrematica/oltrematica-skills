@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+H="$ROOT/hooks/scripts/verify_before_done.sh"
+PASS=0; FAIL=0
+check(){ if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1));
+         else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi; }
+
+export OLTREMATICA_STATE_DIR=$(mktemp -d)
+REPO=$(mktemp -d)
+trap 'rm -rf "$OLTREMATICA_STATE_DIR" "$REPO"' EXIT
+printf '{"scripts":{"test":"pest"}}' > "$REPO/composer.json"
+# shellcheck source=/dev/null
+. "$ROOT/hooks/scripts/lib/state.sh"
+
+stop(){ # stop <session> <message> <stop_hook_active> [<cwd>]
+  local cwd="${4:-$REPO}"
+  printf '{"session_id":"%s","cwd":"%s","hook_event_name":"Stop","stop_hook_active":%s,"last_assistant_message":"%s"}' \
+    "$1" "$cwd" "${3:-false}" "$2" | bash "$H" 2>/dev/null; echo $?
+}
+
+echo "1. THE CASE THAT MATTERS: claim + source edited after the tests passed -> BLOCK"
+S=v1; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+check "exit 2 (blocks)" "2" "$(stop $S 'Done. Fixed the bug.')"
+
+echo "2. exit code is 2, never 1 (exit 1 is NON-blocking in Claude Code)"
+S=v2; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+rc=$(stop $S 'Done.')
+check "not exit 1" "yes" "$([ "$rc" != "1" ] && echo yes || echo no)"
+
+echo "3. the block message tells the agent how to satisfy it"
+S=v3; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+msg=$(printf '{"session_id":"%s","cwd":"%s","stop_hook_active":false,"last_assistant_message":"Done."}' "$S" "$REPO" | bash "$H" 2>&1 >/dev/null)
+check "names the test command" "yes" \
+  "$(printf '%s' "$msg" | grep -qi "composer test" && echo yes || echo no)"
+
+echo "4. tests ran AFTER the edit -> allow"
+S=v4; state_set $S last_source_edit 1000; state_set $S last_test_pass 2000
+check "exit 0" "0" "$(stop $S 'Done. Fixed the bug.')"
+
+echo "5. no completion claim -> allow (even with stale tests)"
+S=v5; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+check "exit 0" "0" "$(stop $S 'Which approach do you want?')"
+
+echo "6. no source touched -> allow (docs-only turn)"
+S=v6; state_set $S last_test_pass 0; state_set $S last_source_edit 0
+check "exit 0" "0" "$(stop $S 'Done. Updated the README.')"
+
+echo "7. LOOP GUARD: stop_hook_active -> stand down"
+S=v7; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+check "exit 0" "0" "$(stop $S 'Done.' true)"
+
+echo "8. FAIL OPEN: repo declares no test command -> allow, and warn"
+NOGATE=$(mktemp -d)
+S=v8; state_set $S last_test_pass 0; state_set $S last_source_edit 2000
+out=$(printf '{"session_id":"%s","cwd":"%s","stop_hook_active":false,"last_assistant_message":"Done."}' "$S" "$NOGATE" | bash "$H" 2>&1 >/dev/null; )
+rc=$(printf '{"session_id":"%s","cwd":"%s","stop_hook_active":false,"last_assistant_message":"Done."}' "$S" "$NOGATE" | bash "$H" >/dev/null 2>&1; echo $?)
+check "exit 0 (fails open)" "0" "$rc"
+check "warns about no gate" "yes" "$(printf '%s' "$out" | grep -qi "no test command" && echo yes || echo no)"
+rm -rf "$NOGATE"
+
+echo "9. FAIL OPEN: malformed stdin -> allow, no traceback"
+rc=$(printf 'not json{{{' | bash "$H" >/dev/null 2>&1; echo $?)
+check "exit 0" "0" "$rc"
+err=$(printf 'not json{{{' | bash "$H" 2>&1 >/dev/null)
+check "no traceback" "no" "$(printf '%s' "$err" | grep -q Traceback && echo yes || echo no)"
+
+echo "10. no exit 1 ANYWHERE in the script (exit 1 is silently non-blocking)"
+count=$(grep -c -E '(^|[^0-9])exit[[:space:]]+1([^0-9]|$)' "$H" 2>/dev/null); count="${count:-0}"
+check "no bare 'exit 1' in script" "0" "$count"
+
+echo "11. claim present but NO source edit at all this session (fresh session) -> allow"
+S=v11; state_set $S last_test_pass 0; state_set $S last_source_edit 0
+check "exit 0" "0" "$(stop $S 'Done. All tests pass.')"
+
+echo "12. tests fresh by exactly ONE second -> allow (boundary, not stale)"
+S=v12; state_set $S last_source_edit 1000; state_set $S last_test_pass 1001
+check "exit 0" "0" "$(stop $S 'Done.')"
+
+echo "13. tests and edit at the SAME timestamp -> allow (>=, not strictly newer)"
+S=v13; state_set $S last_source_edit 1500; state_set $S last_test_pass 1500
+check "exit 0" "0" "$(stop $S 'Done.')"
+
+echo "14. state that does not exist at all (never recorded this session) -> allow"
+S=v14-never-seen
+check "exit 0" "0" "$(stop $S 'Done. Implemented the feature.')"
+
+echo "15. cwd that does not exist on disk -> fails open, does not crash"
+S=v15; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+rc=$(stop $S 'Done.' false "/no/such/path/does-not-exist-$$")
+check "exit 0 (fails open)" "0" "$rc"
+
+echo "16. huge last_assistant_message does not crash the hook"
+S=v16; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+BIG=$(python3 -c "print('word ' * 20000)")
+rc=$(printf '{"session_id":"%s","cwd":"%s","stop_hook_active":false,"last_assistant_message":"%s. Done."}' \
+      "$S" "$REPO" "$BIG" | bash "$H" >/dev/null 2>&1; echo $?)
+check "exit 2 (still blocks correctly)" "2" "$rc"
+
+echo "17. stop_hook_active as JSON boolean true (unquoted) also stands down"
+S=v17; state_set $S last_test_pass 1000; state_set $S last_source_edit 2000
+rc=$(printf '{"session_id":"%s","cwd":"%s","stop_hook_active":true,"last_assistant_message":"Done."}' "$S" "$REPO" \
+     | bash "$H" >/dev/null 2>&1; echo $?)
+check "exit 0" "0" "$rc"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

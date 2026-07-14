@@ -9,13 +9,85 @@ Three levels, increasing in reach:
 1. **Personal** — `~/.claude/skills/<name>`. Available to you only, in every
    project. This is pilot scope: how `adr-management` started.
 2. **Project** — `.claude/skills/<name>` inside a repo, committed to git. Shared
-   with the whole team on that repo. **This is the standard — use it unless you
-   have a reason not to.**
-3. **Plugin (future)** — a marketplace-distributed plugin covering every skill,
-   installed once and updated centrally. Not built; see
-   [Future: plugin conversion](#future-plugin-conversion).
+   with the whole team on that repo.
+3. **Plugin** — this repo installed as a marketplace plugin, once, updated
+   centrally. **This is the standard — use it unless you have a reason not
+   to.** It is the only path that also ships the Stop-hook verification gate;
+   see [Install (primary): plugin marketplace](#install-primary-plugin-marketplace).
+   Before you rely on it, read
+   **[What the verification gate does and does not guarantee](harness/verification-gate.md)**
+   — what it blocks, what can still slip past it, and why it fails open.
 
-## Install (standard)
+## Install (primary): plugin marketplace
+
+The repo is a Claude Code plugin (`.claude-plugin/marketplace.json`,
+`.claude-plugin/plugin.json`, `hooks/hooks.json`). One install gives every repo
+the seven skills **and** the verification-gate hooks, and updates are pulled
+centrally instead of re-copied per repo.
+
+**Why this is primary, not `scripts/install.sh`:** hooks live in
+`settings.json`, and the only alternative to a plugin is editing that file by
+hand in every one of the ~190 repos this could reach, then re-merging it by
+hand on every update. Plugin hooks merge automatically across scopes —
+nothing in a repo's own `settings.json` has to change. That's a functional
+difference, not a packaging preference: `scripts/install.sh` cannot deliver
+hooks at all (see [Fallback](#fallback-scriptsinstallsh-skills-only) below).
+
+Add the marketplace once, then install the plugin:
+
+```bash
+claude plugin marketplace add https://github.com/Oltrematica/oltrematica-skills.git
+claude plugin install oltrematica-skills@oltrematica
+```
+
+Both commands were run against `claude` 2.1.207 — the CLI's `plugin`
+subcommands are what actually exists, not a guess. `marketplace add` against a
+URL was verified as far as it can be before this branch is merged: it clones
+the ref and looks for `.claude-plugin/marketplace.json`, and correctly fails
+with "Marketplace file not found" against `main` today because that file
+doesn't exist there yet — it exists on this branch. The full end-to-end path
+(marketplace add → plugin install → hooks load → Stop hook blocks a stale
+completion claim in a real session) was verified against the **local
+directory form** instead, which is equivalent for everything except the fetch
+step:
+
+```bash
+claude plugin marketplace add /path/to/oltrematica-compliance-skills --scope local
+claude plugin install oltrematica-skills@oltrematica --scope local
+```
+
+Full transcript, including the `--debug hooks` log lines and the actual block
+message, is in `tests/harness/notes.md`. Re-verify the URL form once this
+branch reaches `main`.
+
+Default scope is `user` (available in every project on your machine). Pass
+`--scope project` to declare it in the repo's own `.claude/settings.json` so
+the whole team gets it on pull, or `--scope local` to keep it out of git
+(`.claude/settings.local.json`, personal-only, same repo).
+
+**Verify:** in an interactive session, `/hooks` lists `record_activity.sh`
+(PostToolUse, two matchers) and `verify_before_done.sh` (Stop) with source
+`Plugin`. Headless, there is no `/hooks` equivalent (`/hooks` itself replies
+"isn't available in this environment" under `-p`); use
+`claude --debug hooks -p "..." --debug-file <path>` and grep the log for
+`Read hooks.json for plugin oltrematica-skills` and
+`Loading hooks from plugin: oltrematica-skills` — both are logged at session
+start. Full transcript in `tests/harness/notes.md`.
+
+**Before you rely on the gate to block anything, read
+[What the verification gate does and does not guarantee](harness/verification-gate.md).**
+It fails open by design, and there are real, named gaps in what it catches —
+know them going in.
+
+## Fallback: `scripts/install.sh` (skills only)
+
+For a repo that cannot add a marketplace (offline CI runner, no outbound git
+access, policy blocks it), `scripts/install.sh` still works — but it installs
+**skills only, not hooks**. The verification gate needs `${CLAUDE_PLUGIN_ROOT}`,
+which only the plugin loader sets; a plain file copy has no such variable and
+the hook scripts have nothing to attach to. If you need the Stop-hook gate,
+the plugin is not optional — there is no `settings.json`-only equivalent
+shipped by this repo.
 
 ```bash
 git clone https://github.com/Oltrematica/oltrematica-skills.git /tmp/os
@@ -73,7 +145,12 @@ tooling this way.
 
 ## Updating
 
-There is no version manifest and no update command. To update:
+Plugin install: `claude plugin marketplace update oltrematica` refreshes the
+marketplace, then `claude plugin update oltrematica-skills@oltrematica`
+updates the plugin (restart the session to apply).
+
+Fallback install: there is no version manifest and no update command. To
+update:
 
 1. `git pull` this repo.
 2. Re-run `scripts/install.sh` — it replaces the existing skill directory.
@@ -101,13 +178,57 @@ macOS quick install for the compliance scanners:
 brew install syft grype
 ```
 
-## Future: plugin conversion
+## History: plugin conversion
 
-Deliberate deviation from the original brief: this ships as a plain skills repo,
-not a plugin marketplace (decided 2026-07-09) — rationale in
-[the compliance repo design spec](superpowers/specs/2026-07-09-compliance-skills-repo-design.md).
+The repo shipped as a plain skills repo at first — no plugin marketplace
+(decided 2026-07-09, rationale in
+[the compliance repo design spec](superpowers/specs/2026-07-09-compliance-skills-repo-design.md))
+— because at that point there was nothing a plugin needed to deliver beyond a
+file copy. That changed once the Stop-hook verification gate
+(`hooks/scripts/verify_before_done.sh`) needed a mechanism `settings.json`
+alone can't provide across ~190 repos: automatic hook merging. The plugin
+(`.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json`,
+`hooks/hooks.json`) was built for that reason and is now the primary install
+path — see [Install (primary): plugin marketplace](#install-primary-plugin-marketplace).
 
-Converting later is a sketch, not a design: add `.claude-plugin/marketplace.json`
-at the repo root and a `plugin.json` per plugin, then teams install with
-`/plugin marketplace add Oltrematica/oltrematica-skills` instead of cloning.
-Nothing here is built; treat it as the shape of the next step, not a commitment.
+One deviation from a first draft worth recording: `plugin.json` was originally
+planned at the repo root. `claude plugin validate` rejects that layout —
+"Expected .claude-plugin/marketplace.json or .claude-plugin/plugin.json" — so
+it lives at `.claude-plugin/plugin.json` instead. Verified by running the
+validator against both layouts, not assumed from a template.
+
+A former gap, now fixed and verified live rather than assumed: the plugin's
+component inventory (`claude plugin details`) used to report `Skills (0)`.
+The seven skills are present in the installed plugin bundle
+(`skills/compliance/...`, `skills/harness/...`), but Claude Code's default
+skill auto-discovery for plugins only scans the flat `skills/<name>/`
+layout — it does not descend into the two-level `skills/<track>/<name>/`
+layout this repo uses for its own organization — see
+[Source layout vs. install layout](#source-layout-vs-install-layout).
+
+The fix: `.claude-plugin/plugin.json` declares the two track directories in
+the `skills` field, which the plugin reference documents as *adding to* (not
+replacing) the default `skills/` scan:
+
+```json
+"skills": ["./skills/compliance/", "./skills/harness/"]
+```
+
+Verified live: `claude plugin validate --strict .` passes, and installing
+the plugin into a scratch project and running
+`claude plugin details oltrematica-skills@oltrematica` now reports:
+
+```
+Skills (7)  adr-management, claude-md-authoring, cra-evidence, harness-audit,
+            harness-eval, model-routing, subagent-authoring
+```
+
+The hooks were re-verified unaffected: `Hooks (2)  PostToolUse, Stop` (the
+same three hook entries as `hooks/hooks.json`), and a live headless run
+against the scratch project confirmed `record_activity.sh` (PostToolUse) and
+`verify_before_done.sh` (Stop) both executed — each reached its `state_get`/
+`state_path` call, observable via the session-state directory being created
+under `~/.claude/plugins/data/oltrematica-skills-oltrematica/oltrematica-verify/`.
+Skills remain reachable in a plugin install via the `Skill` tool and are
+unaffected for `scripts/install.sh` installs, which copy by name and do not
+rely on this auto-discovery at all.

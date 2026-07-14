@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Contract test for lib/verify_gate.sh
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LIB="$ROOT/skills/harness/harness-audit/scripts/lib/verify_gate.sh"
+PASS=0; FAIL=0
+check(){ if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1));
+         else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi; }
+
+# shellcheck source=/dev/null
+. "$LIB" 2>/dev/null || { echo "  FAIL: cannot source $LIB"; echo "PASS=0 FAIL=1"; exit 1; }
+
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+
+field(){ detect_verify_gate "$1" | grep "^$2=" | cut -d= -f2-; }
+
+echo "1. composer.json with scripts.test"
+mkdir -p "$T/php"
+printf '{"scripts":{"test":"pest"}}' > "$T/php/composer.json"
+check "detected"  "true"                        "$(field "$T/php" detected)"
+check "source"    "composer.json scripts.test"  "$(field "$T/php" source)"
+check "command"   "composer test"               "$(field "$T/php" command)"
+
+echo "2. package.json with scripts.test"
+mkdir -p "$T/node"
+printf '{"scripts":{"test":"vitest run"}}' > "$T/node/package.json"
+check "detected" "true"           "$(field "$T/node" detected)"
+check "command"  "npm test"       "$(field "$T/node" command)"
+
+echo "3. Makefile test target"
+mkdir -p "$T/mk"; printf 'test:\n\techo hi\n' > "$T/mk/Makefile"
+check "detected" "true"        "$(field "$T/mk" detected)"
+check "command"  "make test"   "$(field "$T/mk" command)"
+
+echo "4. no gate at all"
+mkdir -p "$T/none"
+check "detected" "false" "$(field "$T/none" detected)"
+check "command"  ""      "$(field "$T/none" command)"
+
+echo "5. is_test_command recognises the declared command"
+is_test_command "$T/php" "composer test"; check "declared cmd" "0" "$?"
+
+echo "6. is_test_command recognises common equivalents in a PHP repo"
+is_test_command "$T/php" "php artisan test";             check "artisan test" "0" "$?"
+is_test_command "$T/php" "./vendor/bin/pest --filter=x"; check "pest"         "0" "$?"
+is_test_command "$T/php" "vendor/bin/phpunit";           check "phpunit"      "0" "$?"
+
+echo "7. is_test_command recognises node equivalents"
+is_test_command "$T/node" "npm test";       check "npm test" "0" "$?"
+is_test_command "$T/node" "npx vitest run"; check "vitest"   "0" "$?"
+
+echo "8. is_test_command REJECTS non-test commands (false positives are the danger)"
+is_test_command "$T/php" "git status";              check "git status"  "1" "$?"
+is_test_command "$T/php" "ls tests/";               check "ls tests/"   "1" "$?"
+is_test_command "$T/php" "cat tests/FooTest.php";   check "cat a test"  "1" "$?"
+is_test_command "$T/php" "echo 'run the tests'";    check "echo"        "1" "$?"
+
+echo "9. is_test_command REJECTS additional reader commands (ripgrep, wc, sed)"
+is_test_command "$T/php" "rg -l test tests/";       check "rg"          "1" "$?"
+is_test_command "$T/php" "wc -l tests/FooTest.php"; check "wc"          "1" "$?"
+is_test_command "$T/php" "sed -n '1,20p' tests/FooTest.php"; check "sed" "1" "$?"
+
+echo "10. is_test_command ACCEPTS real invocations (position-anchored match)"
+is_test_command "$T/php"  "composer test";                        check "composer test"                "0" "$?"
+is_test_command "$T/php"  "cd app && composer test";               check "cd app && composer test"      "0" "$?"
+is_test_command "$T/php"  "composer test 2>&1 | tee out.txt";      check "composer test | tee"          "0" "$?"
+is_test_command "$T/php"  "php artisan test --filter=Invoice";     check "artisan test --filter"        "0" "$?"
+is_test_command "$T/php"  "./vendor/bin/pest tests/Unit";          check "./vendor/bin/pest"             "0" "$?"
+is_test_command "$T/php"  "vendor/bin/phpunit";                    check "vendor/bin/phpunit"            "0" "$?"
+is_test_command "$T/node" "npm test";                              check "npm test"                      "0" "$?"
+is_test_command "$T/node" "npm run test -- --watch=false";         check "npm run test -- --watch=false" "0" "$?"
+is_test_command "$T/node" "npx vitest run";                        check "npx vitest run"                "0" "$?"
+is_test_command "$T/mk"   "make test";                             check "make test"                     "0" "$?"
+is_test_command "$T/php"  "FOO=1 composer test";                   check "FOO=1 composer test"           "0" "$?"
+is_test_command "$T/php"  "echo hi && composer test";              check "echo hi && composer test"      "0" "$?"
+
+echo "11. is_test_command REJECTS naive-substring false accepts (Finding 1)"
+is_test_command "$T/php" "cat tests/FooTest.php";                    check "cat tests/FooTest.php"          "1" "$?"
+is_test_command "$T/php" "ls tests/";                                check "ls tests/"                      "1" "$?"
+is_test_command "$T/php" "rg phpunit";                               check "rg phpunit"                     "1" "$?"
+is_test_command "$T/php" "grep -rn pest .";                          check "grep -rn pest ."                "1" "$?"
+is_test_command "$T/php" "git log --oneline -- tests/";              check "git log --oneline -- tests/"    "1" "$?"
+is_test_command "$T/php" "find . -name '*Test.php'";                 check "find . -name '*Test.php'"       "1" "$?"
+is_test_command "$T/php" "# composer test";                          check "# composer test"                "1" "$?"
+is_test_command "$T/php" "printf 'composer test'";                   check "printf 'composer test'"         "1" "$?"
+is_test_command "$T/php" "echo composer test";                       check "echo composer test"             "1" "$?"
+is_test_command "$T/php" 'export CMD="composer test"';                check 'export CMD="composer test"'     "1" "$?"
+is_test_command "$T/php" "alias t='composer test'";                  check "alias t='composer test'"        "1" "$?"
+is_test_command "$T/php" "which pest";                               check "which pest"                     "1" "$?"
+is_test_command "$T/php" "man pest";                                 check "man pest"                       "1" "$?"
+is_test_command "$T/php" "cat tests/x.php && echo composer test";    check "cat ... && echo composer test"  "1" "$?"
+is_test_command "$T/php" "";                                         check "(empty string)"                 "1" "$?"
+is_test_command "$T/php" "   ";                                      check "(whitespace only)"               "1" "$?"
+
+echo "12. Finding 2 — denylist verb on one segment no longer poisons a later real test run"
+is_test_command "$T/php" "$(printf 'echo hi\ncomposer test')"; check "echo hi (line1) / composer test (line2)" "0" "$?"
+
+echo "13. documented limitation — false && composer test is still accepted (see comment in verify_gate.sh)"
+is_test_command "$T/php" "false && composer test"; check "false && composer test (known limitation)" "0" "$?"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

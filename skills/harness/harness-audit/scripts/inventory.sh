@@ -28,6 +28,10 @@ command -v python3 >/dev/null 2>&1 || {
   exit 127
 }
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib/verify_gate.sh
+. "$SCRIPT_DIR/lib/verify_gate.sh"
+
 ROOT="${1:-.}"
 [ -d "$ROOT" ] || { echo "ERROR: not a directory: $ROOT" >&2; exit 1; }
 ROOT=$(cd "$ROOT" && pwd)
@@ -105,22 +109,6 @@ print('true' if declared else 'false')
 PY
 }
 
-# "true"/"false": whether <file> parses as JSON and has a top-level
-# "scripts"."test" key (npm/composer convention). Never raises.
-has_scripts_test() {
-  python3 - "$1" <<'PY'
-import json, sys
-path = sys.argv[1]
-try:
-    with open(path) as f:
-        d = json.load(f)
-    scripts = d.get('scripts') if isinstance(d, dict) else None
-    print('true' if isinstance(scripts, dict) and 'test' in scripts else 'false')
-except Exception:
-    print('false')
-PY
-}
-
 # --- Surface 1: CLAUDE.md ---
 CLAUDE_MD="$ROOT/CLAUDE.md"
 if [ -f "$CLAUDE_MD" ] && [ -r "$CLAUDE_MD" ]; then
@@ -168,20 +156,9 @@ fi
 MCP_FILE=false
 [ -f "$ROOT/.mcp.json" ] && MCP_FILE=true
 
-# --- Surface 7: verify gate ---
-# A verify gate is any declared way to run the test suite.
-GATE_DETECTED=false
-GATE_SOURCE=""
-if [ -f "$ROOT/composer.json" ] && [ "$(has_scripts_test "$ROOT/composer.json")" = true ]; then
-  GATE_DETECTED=true; GATE_SOURCE="composer.json scripts.test"
-elif [ -f "$ROOT/package.json" ] && [ "$(has_scripts_test "$ROOT/package.json")" = true ]; then
-  GATE_DETECTED=true; GATE_SOURCE="package.json scripts.test"
-elif [ -f "$ROOT/Makefile" ] && grep -qE '^test:' "$ROOT/Makefile" 2>/dev/null; then
-  GATE_DETECTED=true; GATE_SOURCE="Makefile test target"
-elif [ -d "$ROOT/.github/workflows" ] && grep -rqlE 'run:.*(test|pest|phpunit|vitest|jest)' "$ROOT/.github/workflows" 2>/dev/null; then
-  GATE_DETECTED=true; GATE_SOURCE="GitHub Actions workflow"
-fi
-
+# --- Surface 7: verify gate (shared with the verification hook) ---
+GATE_DETECTED=$(detect_verify_gate "$ROOT" | grep '^detected=' | cut -d= -f2-)
+GATE_SOURCE=$(detect_verify_gate "$ROOT"   | grep '^source='   | cut -d= -f2-)
 GATE_SOURCE_JSON=$(json_str "$GATE_SOURCE")
 
 cat <<JSON
