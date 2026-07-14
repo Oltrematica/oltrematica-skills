@@ -1,107 +1,113 @@
 # Distribution
 
-How to get `adr-management` and `cra-evidence` into a repo, and how the
-options relate to each other.
+How to get Oltrematica skills into a repo, and how the options relate.
 
 ## Scope ladder
 
 Three levels, increasing in reach:
 
 1. **Personal** — `~/.claude/skills/<name>`. Available to you only, in every
-   project. This is the pilot scope: how `adr-management` started.
-2. **Project** — `.claude/skills/<name>` inside a repo, committed to git.
-   Shared with the whole team on that repo. This is the current standard —
-   use it unless you have a reason not to.
-3. **Plugin (future)** — a marketplace-distributed plugin covering both
-   skills, installed once and updated centrally. Not built yet; see
-   [Future: plugin conversion](#future-plugin-conversion) below.
+   project. This is pilot scope: how `adr-management` started.
+2. **Project** — `.claude/skills/<name>` inside a repo, committed to git. Shared
+   with the whole team on that repo. **This is the standard — use it unless you
+   have a reason not to.**
+3. **Plugin (future)** — a marketplace-distributed plugin covering every skill,
+   installed once and updated centrally. Not built; see
+   [Future: plugin conversion](#future-plugin-conversion).
 
-## Install per repo (standard)
+## Install (standard)
 
 ```bash
-git clone https://github.com/Oltrematica/oltrematica-compliance-skills.git /tmp/ocs
-cp -R /tmp/ocs/skills/cra-evidence  /path/to/repo/.claude/skills/cra-evidence
-cp -R /tmp/ocs/skills/adr-management /path/to/repo/.claude/skills/adr-management
+git clone https://github.com/Oltrematica/oltrematica-skills.git /tmp/os
+/tmp/os/scripts/install.sh <skill-name>... --to /path/to/your-repo
 ```
 
-Commit `.claude/skills/` so the team gets it on pull.
+Run it with no arguments to list the available skills.
 
-**Verify:** restart Claude Code in the target repo (or start a new session)
-and run `/skills` — both skills should be listed.
+For personal scope, target your home Claude directory's parent — the installer
+writes to `<target>/.claude/skills/`:
 
-**Why a plain copy works:** every script inside a skill uses paths relative
-to the skill's own directory, not to this repo. A `cp -R` (or a `git clone`
-followed by a copy, as above) is sufficient — no rewriting, no build step.
-This was verified during the skills' preparation for in-repo distribution
-(relative script paths survive the move).
+```bash
+/tmp/os/scripts/install.sh adr-management --to ~
+```
+
+Commit `.claude/skills/` so the team gets the skill on pull.
+
+**Verify:** restart Claude Code in the target repo (or start a new session) and
+run `/skills` — the skill should be listed.
+
+## Source layout vs. install layout
+
+Skills live under `skills/<track>/<name>/` in this repo, but always install to
+the **flat** path `.claude/skills/<name>/`. Claude Code discovers skills by
+looking for `.claude/skills/<name>/SKILL.md`; it knows nothing about tracks.
+The track directories organize *this* repo and never appear in a target repo.
+
+**Why a plain copy works:** a skill's scripts resolve paths in one of two ways,
+never a third. `new_adr.sh` computes its own directory
+(`SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)`) to find
+`assets/template.md` next to it. `gen_sbom.sh`, `diff_sbom.py`, `scan_vulns.sh`,
+and `a11y_scan.sh` have no path dependency at all — they take every input as a
+CLI argument and never look for a sibling file. Either way, nothing points back
+at this repo, which is why a plain copy is sufficient — no rewriting, no build
+step. Verified by execution, not assumed.
 
 ## Submodule option
 
-Claude Code discovers skills by looking for `.claude/skills/<name>/SKILL.md`.
-A git submodule that points at the *whole* `oltrematica-compliance-skills`
-repo cannot itself live at `.claude/skills/adr-management`, because that path
-must resolve directly to a single skill's `SKILL.md` — not to a repo
-containing `skills/adr-management/`.
+Claude Code needs `.claude/skills/<name>/SKILL.md` to resolve directly to a
+single skill. A submodule pointing at the *whole* `oltrematica-skills` repo
+cannot itself live at `.claude/skills/adr-management`, because that path would
+resolve to a repo containing `skills/compliance/adr-management/`, not to a
+`SKILL.md`.
 
-Practical layout if you want submodule tracking instead of an untracked copy:
+Layout if you want submodule tracking anyway:
 
 1. Add the submodule outside `.claude/`, e.g. `tools/oltrematica-skills`.
-2. Copy (or symlink) each skill you need from
-   `tools/oltrematica-skills/skills/<name>` into
-   `.claude/skills/<name>`.
+2. Run `tools/oltrematica-skills/scripts/install.sh <name> --to .` to copy each
+   skill you need into `.claude/skills/<name>/`.
 
-**Recommendation: skip the submodule and use a plain copy.** A submodule adds
-a second thing to keep in sync (the pointer commit *and* the copy/symlink)
-for a benefit — pinned upstream version — that most repos don't need. Use the
-submodule only if your repo already has a policy of pinning all external
+**Recommendation: skip the submodule.** It adds a second thing to keep in sync
+(the pointer commit *and* the copy) for a benefit — a pinned upstream version —
+that most repos don't need. Use it only if your repo already pins all external
 tooling this way.
 
 ## Updating
 
-There is no version manifest or update command. To update:
+There is no version manifest and no update command. To update:
 
-1. Re-clone or `git pull` this repo (or its submodule, if you used one).
-2. Re-run the `cp -R` install commands above — they overwrite the existing
-   skill directory.
+1. `git pull` this repo.
+2. Re-run `scripts/install.sh` — it replaces the existing skill directory.
 3. Review the diff before committing, same as any other vendored code.
 
-For a changelog of what changed in a skill, use `git log` scoped to its
-directory in this repo, e.g.:
+Changelog for one skill:
 
 ```bash
-git log --oneline -- skills/cra-evidence
+git log --oneline -- skills/compliance/cra-evidence
 ```
 
-There are no tagged releases of this repo yet; updating means tracking
-`main`.
+There are no tagged releases yet; updating means tracking `main`.
 
-## Future: plugin conversion
+## External tool prerequisites
 
-Deliberate deviation from the original brief: this repo ships as a plain
-skills repo (`skills/`, `docs/`, `tests/`), not a plugin marketplace (chosen on 2026-07-09) — see
-[`docs/superpowers/specs/2026-07-09-compliance-skills-repo-design.md`](superpowers/specs/2026-07-09-compliance-skills-repo-design.md)
-for the rationale. Converting to a plugin later is a sketch, not a design:
-add a `.claude-plugin/marketplace.json` at the repo root, a `plugin.json` per
-skill, move each skill under its plugin's own directory (or keep `skills/`
-and point `plugin.json` at it), and teams install with
-`/plugin marketplace add Oltrematica/oltrematica-compliance-skills` instead
-of cloning and copying. Nothing here is built; treat it as the shape of the
-next step, not a commitment to a timeline.
+| Skill | Needs |
+|-------|-------|
+| `adr-management` | `bash`, `sed`, `find` — present by default on macOS and Linux |
+| `cra-evidence` | `python3` (stdlib only — `diff_sbom.py` is a Python script and `gen_sbom.sh` calls `python3`); `syft` (SBOM, required); `grype` (primary scanner) or `osv-scanner` (fallback); Node + `npx` + Chrome for the a11y module only |
+| Harness-track skills | `bash`, `python3` (stdlib only). The Superpowers plugin must be installed. |
 
-## External tool prerequisites per skill
-
-- **`adr-management`** — none beyond `bash`, `sed`, `find` (present on macOS
-  and Linux by default).
-- **`cra-evidence`**:
-  - `syft` — required, generates the SBOM.
-  - `grype` — primary vulnerability scanner. `osv-scanner` is an accepted
-    fallback if `grype` is unavailable.
-  - Node.js + `npx` + a local Chrome install — required only for the a11y
-    module (W4), which runs `@axe-core/cli`. Repos without frontend routes
-    don't need this.
-
-macOS quick install for the required scanning tools:
+macOS quick install for the compliance scanners:
 
 ```bash
 brew install syft grype
 ```
+
+## Future: plugin conversion
+
+Deliberate deviation from the original brief: this ships as a plain skills repo,
+not a plugin marketplace (decided 2026-07-09) — rationale in
+[the compliance repo design spec](superpowers/specs/2026-07-09-compliance-skills-repo-design.md).
+
+Converting later is a sketch, not a design: add `.claude-plugin/marketplace.json`
+at the repo root and a `plugin.json` per plugin, then teams install with
+`/plugin marketplace add Oltrematica/oltrematica-skills` instead of cloning.
+Nothing here is built; treat it as the shape of the next step, not a commitment.
