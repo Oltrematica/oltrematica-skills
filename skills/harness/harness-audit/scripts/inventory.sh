@@ -2,7 +2,7 @@
 # inventory.sh — read-only inventory of a repo's Claude Code harness surfaces.
 #
 # Usage: inventory.sh [repo-root]     (default: current directory)
-# Output: JSON on stdout describing seven surfaces.
+# Output: JSON on stdout describing eight surfaces.
 # Exit: 0 on success; 1 if repo-root is not a directory; 127 if python3 is
 #       missing (required — stdlib json is used to keep output always valid).
 #
@@ -99,6 +99,17 @@ else
   CM_LINES=0
 fi
 
+# --- Surface 8: model routing policy ---
+# Facts only: does CLAUDE.md contain the stable, greppable heading that
+# skills/harness/model-routing/assets/claude_md_snippet.md ships as its
+# paste-in block? This never judges whether the policy is good, complete or
+# needed — that classification is the skill's job, not the script's.
+MODEL_ROUTING_HEADING='## Model routing policy (this repo)'
+POLICY_DECLARED=false
+if [ -f "$CLAUDE_MD" ] && [ -r "$CLAUDE_MD" ] && grep -qF "$MODEL_ROUTING_HEADING" "$CLAUDE_MD" 2>/dev/null; then
+  POLICY_DECLARED=true
+fi
+
 # --- Surfaces 2, 3, 5: skills, agents, commands ---
 SKILLS=$(list_names "$ROOT/.claude/skills")
 AGENTS=$(list_names "$ROOT/.claude/agents")
@@ -144,6 +155,7 @@ cat <<JSON
   "commands": $COMMANDS,
   "hooks": { "settings_file": $HOOKS_FILE, "configured": $HOOKS_CONFIGURED },
   "mcp": { "config_file": $MCP_FILE },
-  "verify_gate": { "detected": $GATE_DETECTED, "source": $GATE_SOURCE_JSON }
+  "verify_gate": { "detected": $GATE_DETECTED, "source": $GATE_SOURCE_JSON },
+  "model_routing": { "policy_declared": $POLICY_DECLARED }
 }
 JSON

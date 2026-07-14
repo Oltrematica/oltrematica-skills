@@ -6,9 +6,13 @@ description: >-
   new agent capability is being added to a repo ("create an agent that reviews
   migrations", "I want a subagent for research", "should this be a skill or a
   command?", "make this run automatically every time", "add a /deploy command"),
-  or when an existing subagent needs its tool allowlist, model tier or description
-  tuned. Starts with the choice of artifact, because the most common harness
-  mistake is building the wrong one.
+  or when an existing subagent needs its tool allowlist or description tuned.
+  Owns the artifact — what to build and its definition — not which model tier
+  it should run on; a question phrased as a tier decision ("what model should
+  my review subagent run on?", "should this run on Opus or Haiku?") is
+  `model-routing`'s territory even when the artifact in question is a
+  subagent. Starts with the choice of artifact, because the most common
+  harness mistake is building the wrong one.
 ---
 
 # Subagent Authoring
@@ -179,7 +183,9 @@ otherwise.
 
 Omit `model:` and inherit the session's. Set it only when you are confident:
 a cheaper tier for mechanical, high-volume work; a stronger one for the hardest
-judgement. Guessing here costs money on every dispatch, forever.
+judgement. Guessing here costs money on every dispatch, forever. Which tier to
+pick is `model-routing`'s decision, not this skill's — this section only
+covers the mechanics of the field; hand off there for the routing table.
 
 ### It has none of your context
 

@@ -3,61 +3,76 @@
     {
       "name": "harness-audit",
       "prompts": [
-        {"prompt": "set up Claude Code for this repo", "expect": "trigger"},
-        {"prompt": "is our Claude setup any good?", "expect": "trigger"},
-        {"prompt": "what's missing from our .claude directory?", "expect": "trigger"},
-        {"prompt": "onboard this project to agentic development", "expect": "trigger"},
-        {"prompt": "audit our harness", "expect": "trigger"},
-        {"prompt": "our CLAUDE.md is too long", "expect": "no-trigger"},
-        {"prompt": "create an agent that reviews migrations", "expect": "no-trigger"},
-        {"prompt": "does this skill trigger?", "expect": "no-trigger"},
-        {"prompt": "prepare the release", "expect": "no-trigger"},
-        {"prompt": "fix the failing invoice test", "expect": "no-trigger"}
+        {"prompt": "our .claude folder is a mess, can you sort it out", "expect": "trigger"},
+        {"prompt": "we're about to start using Claude Code on this codebase, get it ready", "expect": "trigger"},
+        {"prompt": "the agent doesn't seem to have any scaffolding to work with here", "expect": "trigger"},
+        {"prompt": "review our whole Claude setup end to end", "expect": "trigger"},
+        {"prompt": "what do we still need to add before Claude can work well in this repo", "expect": "trigger"},
+        {"prompt": "our CLAUDE.md keeps contradicting itself", "expect": "no-trigger"},
+        {"prompt": "the CLAUDE.md file is unreadable, split it up", "expect": "no-trigger"},
+        {"prompt": "onboard this project, and audit whether CLAUDE.md needs work", "expect": "no-trigger"},
+        {"prompt": "should our onboarding docs mention Claude Code setup", "expect": "no-trigger"},
+        {"prompt": "are we CRA ready?", "expect": "no-trigger"}
       ]
     },
     {
       "name": "claude-md-authoring",
       "prompts": [
-        {"prompt": "write a CLAUDE.md for this repo", "expect": "trigger"},
-        {"prompt": "our CLAUDE.md is too long", "expect": "trigger"},
-        {"prompt": "the agent keeps forgetting to run the tests", "expect": "trigger"},
-        {"prompt": "why is Claude ignoring our conventions?", "expect": "trigger"},
-        {"prompt": "add this rule to CLAUDE.md", "expect": "trigger"},
-        {"prompt": "audit our harness", "expect": "no-trigger"},
-        {"prompt": "should this be a skill or a command?", "expect": "no-trigger"},
-        {"prompt": "test my skill's description", "expect": "no-trigger"},
-        {"prompt": "why did we choose Redis for queues?", "expect": "no-trigger"},
-        {"prompt": "update the README badges", "expect": "no-trigger"}
+        {"prompt": "this file has ballooned to 800 lines and nobody reads all of it", "expect": "trigger"},
+        {"prompt": "Claude keeps skipping the testing rule even though it's written down", "expect": "trigger"},
+        {"prompt": "can you tidy up the root policy file for this repo", "expect": "trigger"},
+        {"prompt": "we need a starting CLAUDE.md for a brand new project", "expect": "trigger"},
+        {"prompt": "half the rules in here contradict the other half", "expect": "trigger"},
+        {"prompt": "audit our whole Claude setup, top to bottom", "expect": "no-trigger"},
+        {"prompt": "generate an SBOM for v2.1", "expect": "no-trigger"},
+        {"prompt": "should this be a skill or a subagent", "expect": "no-trigger"},
+        {"prompt": "why do I keep hitting my usage limit", "expect": "no-trigger"},
+        {"prompt": "does this description actually trigger the skill", "expect": "no-trigger"}
       ]
     },
     {
       "name": "subagent-authoring",
       "prompts": [
-        {"prompt": "create an agent that reviews migrations", "expect": "trigger"},
-        {"prompt": "should this be a skill or a command?", "expect": "trigger"},
-        {"prompt": "I want a subagent for research", "expect": "trigger"},
-        {"prompt": "make this run automatically every time", "expect": "trigger"},
-        {"prompt": "add a /deploy command", "expect": "trigger"},
-        {"prompt": "write a CLAUDE.md for this repo", "expect": "no-trigger"},
-        {"prompt": "is our Claude setup any good?", "expect": "no-trigger"},
-        {"prompt": "the skill fires on everything", "expect": "no-trigger"},
-        {"prompt": "generate an SBOM for v2.1", "expect": "no-trigger"},
-        {"prompt": "refactor UserController into a service class", "expect": "no-trigger"}
+        {"prompt": "we need a dedicated agent that just reviews PRs and reports back", "expect": "trigger"},
+        {"prompt": "should this be a background task or does it need to see everything I'm doing", "expect": "trigger"},
+        {"prompt": "wire up something that always reformats files after I edit them", "expect": "trigger"},
+        {"prompt": "give me a shortcut for the release checklist I keep retyping", "expect": "trigger"},
+        {"prompt": "write a slash command that audits repo readiness for Claude", "expect": "trigger"},
+        {"prompt": "what's missing from our .claude directory?", "expect": "no-trigger"},
+        {"prompt": "draft an ADR for choosing Postgres over MySQL", "expect": "no-trigger"},
+        {"prompt": "what model tier should my review subagent run on?", "expect": "no-trigger"},
+        {"prompt": "our CLAUDE.md is too long", "expect": "no-trigger"},
+        {"prompt": "why do we keep hitting the usage limit", "expect": "no-trigger"}
       ]
     },
     {
       "name": "harness-eval",
       "prompts": [
-        {"prompt": "does this skill trigger?", "expect": "trigger"},
-        {"prompt": "test my skill's description", "expect": "trigger"},
-        {"prompt": "the skill fires on everything", "expect": "trigger"},
-        {"prompt": "why didn't Claude use the skill?", "expect": "trigger"},
-        {"prompt": "did that CLAUDE.md change actually work?", "expect": "trigger"},
-        {"prompt": "write a CLAUDE.md for this repo", "expect": "no-trigger"},
+        {"prompt": "our skills keep overlapping and triggering on the same prompts", "expect": "trigger"},
+        {"prompt": "prove this skill actually works before we roll it out to the team", "expect": "trigger"},
+        {"prompt": "I changed the description but I'm not sure it still fires correctly", "expect": "trigger"},
+        {"prompt": "can you show me evidence this CLAUDE.md tweak actually changed behavior", "expect": "trigger"},
+        {"prompt": "this skill seems to go off no matter what I type", "expect": "trigger"},
+        {"prompt": "onboard this project to agentic development", "expect": "no-trigger"},
+        {"prompt": "should this be a skill or a command?", "expect": "no-trigger"},
+        {"prompt": "check our dependencies for known CVEs", "expect": "no-trigger"},
+        {"prompt": "clean up our CLAUDE.md, it's grown out of control", "expect": "no-trigger"},
+        {"prompt": "should we route this task to a cheaper model", "expect": "no-trigger"}
+      ]
+    },
+    {
+      "name": "model-routing",
+      "prompts": [
+        {"prompt": "why do I keep hitting the limit?", "expect": "trigger"},
+        {"prompt": "this is burning my usage", "expect": "trigger"},
+        {"prompt": "can we use a cheaper model for this?", "expect": "trigger"},
+        {"prompt": "what model tier should my review subagent run on?", "expect": "trigger"},
+        {"prompt": "do we really need Opus for a one-line rename", "expect": "trigger"},
         {"prompt": "create an agent that reviews migrations", "expect": "no-trigger"},
-        {"prompt": "set up Claude Code for this repo", "expect": "no-trigger"},
-        {"prompt": "are we CRA ready?", "expect": "no-trigger"},
-        {"prompt": "write a migration for the orders table", "expect": "no-trigger"}
+        {"prompt": "our CLAUDE.md is too long", "expect": "no-trigger"},
+        {"prompt": "prepare the release", "expect": "no-trigger"},
+        {"prompt": "audit our harness", "expect": "no-trigger"},
+        {"prompt": "does this skill trigger?", "expect": "no-trigger"}
       ]
     }
   ]

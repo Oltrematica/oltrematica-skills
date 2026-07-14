@@ -17,13 +17,14 @@ check "stdout is valid JSON" "yes" \
 
 q() { printf '%s' "$OUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 
-check "all seven surfaces reported" "yes" \
-  "$(q "'yes' if sorted(d) == sorted(['claude_md','skills','agents','hooks','commands','mcp','verify_gate']) else sorted(d)")"
+check "all eight surfaces reported" "yes" \
+  "$(q "'yes' if sorted(d) == sorted(['claude_md','skills','agents','hooks','commands','mcp','verify_gate','model_routing']) else sorted(d)")"
 check "D1: CLAUDE.md found and over 200 lines" "True" "$(q "d['claude_md']['exists'] and d['claude_md']['lines'] > 200")"
 check "D2: no agents"        "0"     "$(q "len(d['agents'])")"
 check "D3: no hooks"         "False" "$(q "d['hooks']['configured']")"
 check "D4: no verify gate"   "False" "$(q "d['verify_gate']['detected']")"
 check "D5: the bad skill is inventoried" "True" "$(q "'do-everything' in d['skills']")"
+check "D6: bad-harness has no model routing policy heading" "False" "$(q "d['model_routing']['policy_declared']")"
 
 echo "error path: non-existent repo root"
 bash "$INV" /no/such/path >/dev/null 2>&1
@@ -79,6 +80,28 @@ OUT4=$(bash "$INV" "$T4" 2>/dev/null); RC4=$?
 check "exit code 0" "0" "$RC4"
 check "stdout is valid JSON" "yes" "$(valid_json "$OUT4")"
 chmod 644 "$T4/CLAUDE.md"
+
+echo "model_routing: a repo whose CLAUDE.md carries the policy heading reports true"
+T6=$(mktemp -d); TMP_ROOTS+=("$T6")
+cat > "$T6/CLAUDE.md" <<'MD'
+# CLAUDE.md
+
+## Model routing policy (this repo)
+- Mechanical, fully-specified edits: cheapest tier is mandatory, not optional
+MD
+OUT6=$(bash "$INV" "$T6" 2>/dev/null); RC6=$?
+check "exit code 0" "0" "$RC6"
+check "stdout is valid JSON" "yes" "$(valid_json "$OUT6")"
+check "policy_declared true when heading present" "True" \
+  "$(printf '%s' "$OUT6" | python3 -c "import json,sys; print(json.load(sys.stdin)['model_routing']['policy_declared'])")"
+
+echo "model_routing: a CLAUDE.md without the heading reports false"
+T7=$(mktemp -d); TMP_ROOTS+=("$T7")
+printf '# CLAUDE.md\n\nNo routing policy here.\n' > "$T7/CLAUDE.md"
+OUT7=$(bash "$INV" "$T7" 2>/dev/null); RC7=$?
+check "exit code 0" "0" "$RC7"
+check "policy_declared false when heading absent" "False" \
+  "$(printf '%s' "$OUT7" | python3 -c "import json,sys; print(json.load(sys.stdin)['model_routing']['policy_declared'])")"
 
 echo "robustness: missing python3 fails loudly, not with a stack trace"
 FAKEBIN=$(mktemp -d); TMP_ROOTS+=("$FAKEBIN")

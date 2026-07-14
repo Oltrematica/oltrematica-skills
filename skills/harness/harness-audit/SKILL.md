@@ -2,17 +2,24 @@
 name: harness-audit
 description: >-
   Audit, bootstrap or improve a repository's Claude Code harness as a whole — the
-  CLAUDE.md, skills, subagents, hooks, slash commands, MCP servers and
-  verification gate that coding agents run inside. Use when onboarding a repo to
-  agentic development ("set up Claude Code for this repo", "onboard this
-  project", "get this repo ready for Claude"), when the harness's overall
+  CLAUDE.md, skills, subagents, hooks, slash commands, MCP servers, verification
+  gate and model routing policy that coding agents run inside. Use when
+  onboarding a repo to agentic development ("set up Claude Code for this repo",
+  "onboard this project", "get this repo ready for Claude"), when the harness's overall
   completeness or quality is in question ("is our Claude setup any good?",
   "audit our harness", "what's missing from our .claude directory?"), or when an
   agent keeps underperforming in a repo and the cause may be missing or rotten
-  scaffolding rather than the task itself. A complaint about one file's content or
-  length (e.g. "our CLAUDE.md is too long") is not a harness audit — that belongs
-  to CLAUDE.md authoring. Produces a present/gap/not-applicable report — never a
-  bare "looks good".
+  scaffolding rather than the task itself. This skill answers what scaffolding is
+  present, missing or rotten across the harness as a whole — it does not judge any
+  single file's content, length, tone or internal consistency. When a CLAUDE.md
+  content judgement is one of the asks in a request, that exclusion governs the
+  entire request, even if the same sentence also uses onboarding or general
+  setup-review vocabulary: the presence of a content judgement routes the whole
+  thing to CLAUDE.md authoring — it is not a partial trigger, and matching the
+  onboarding vocabulary elsewhere in the sentence does not override the exclusion.
+  A judgement about one file itself (CLAUDE.md above all) is CLAUDE.md authoring's
+  territory, full stop. Produces a present/gap/not-applicable report — never a bare
+  "looks good".
 ---
 
 # Harness Audit
@@ -30,8 +37,8 @@ to the skill that owns each surface.
    skip the script — the script is what makes the facts reproducible.
 3. **Three states, no fourth.** Every surface is **present**, a **gap**, or **not
    applicable**, each with a stated reason. "Looks fine" is not a state.
-4. **One review batch.** Audit all seven surfaces, then present *one* report. Do
-   not interrupt the human seven times.
+4. **One review batch.** Audit all eight surfaces, then present *one* report. Do
+   not interrupt the human eight times.
 
 ## Workflow
 
@@ -41,9 +48,9 @@ to the skill that owns each surface.
 scripts/inventory.sh <repo-root>
 ```
 
-Returns JSON with seven keys: `claude_md`, `skills`, `agents`, `hooks`,
-`commands`, `mcp`, `verify_gate`. If the script cannot run, say so and stop —
-do not fall back to guessing.
+Returns JSON with eight keys: `claude_md`, `skills`, `agents`, `hooks`,
+`commands`, `mcp`, `verify_gate`, `model_routing`. If the script cannot run,
+say so and stop — do not fall back to guessing.
 
 ### 2. Classify each surface
 
@@ -56,6 +63,7 @@ do not fall back to guessing.
 | **Slash commands** | Frequent human-fired prompts are commands | The team pastes the same prompt repeatedly | No repeated prompts |
 | **MCP** | Configured where external systems are genuinely needed | An external system is accessed by ad-hoc shell instead | No external system in the loop — the common case |
 | **Verify gate** | A declared way to run the tests, and CLAUDE.md says it must pass before "done" | No test command, or one that nobody told the agent to run | A repo with no executable code |
+| **Model routing policy** | CLAUDE.md declares which work goes to which model tier, and when to delegate | Absent — so every task defaults to the most capable model, and the team burns its usage limit on mechanical work | A repo where nobody is hitting usage limits and every task genuinely needs the top tier (rare — treat this claim with suspicion) |
 
 **Line count is a signal, not a verdict.** A long CLAUDE.md is evidence to
 investigate, not an automatic gap. Read it and ask: is this *policy* (what is
@@ -81,6 +89,7 @@ This skill diagnoses. It does not author.
 | Needs a new skill written | `superpowers:writing-skills` (+ `docs/contributing-skills.md`) |
 | No verify gate | The built-in `verify` skill bootstraps one |
 | Hooks need wiring into settings.json | The built-in `update-config` skill owns settings.json |
+| No model routing policy declared | `model-routing` |
 
 Propose the handoffs in priority order and let the human pick. Do not silently
 chain into four skills and rewrite the repo.
@@ -97,5 +106,5 @@ order:
    speculative skills on day one.
 4. Everything else, later, driven by observed friction rather than by this list.
 
-Resist installing the full seven surfaces on a repo that needs two. An unused hook
+Resist installing the full eight surfaces on a repo that needs two. An unused hook
 is a liability; an unused MCP server is a bigger one.
