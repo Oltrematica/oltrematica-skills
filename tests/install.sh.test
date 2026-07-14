@@ -104,6 +104,21 @@ rm -rf "$AMBIG_TARGET"
 cleanup_fixture
 trap 'rm -rf "$TARGET"' EXIT
 
+echo "11. '.', '..', and a name containing '/' are rejected explicitly"
+DOT_TARGET=$(mktemp -d)
+ERR=$(bash "$INSTALL" . --to "$DOT_TARGET" 2>&1); RC=$?
+check "'.' exit code 2" "2" "$RC"
+check "'.' names the rejection" "yes" "$(echo "$ERR" | grep -qi "not a valid skill name" && echo yes || echo no)"
+ERR=$(bash "$INSTALL" .. --to "$DOT_TARGET" 2>&1); RC=$?
+check "'..' exit code 2" "2" "$RC"
+check "'..' names the rejection" "yes" "$(echo "$ERR" | grep -qi "not a valid skill name" && echo yes || echo no)"
+ERR=$(bash "$INSTALL" a/b --to "$DOT_TARGET" 2>&1); RC=$?
+check "'a/b' exit code 2" "2" "$RC"
+check "'a/b' names the rejection" "yes" "$(echo "$ERR" | grep -qi "must not contain" && echo yes || echo no)"
+check "nothing installed for any of the three" "no" \
+  "$([ -d "$DOT_TARGET/.claude/skills" ] && echo yes || echo no)"
+rm -rf "$DOT_TARGET"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

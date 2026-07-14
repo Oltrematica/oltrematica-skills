@@ -47,6 +47,20 @@ fi
 [ -d "$TARGET" ] || { echo "ERROR: target repo not found: $TARGET" >&2; exit 2; }
 
 for name in "${SKILLS[@]}"; do
+  # Reject a name of "." or ".." or one containing "/" explicitly, rather than
+  # relying on downstream accidents (the ambiguity check tripping because >=2
+  # tracks exist, or `rm`/`cp` refusing "."/".."/a path) to catch it.
+  case "$name" in
+    .|..)
+      echo "ERROR: '$name' is not a valid skill name." >&2
+      exit 2
+      ;;
+    */*)
+      echo "ERROR: skill name must not contain '/': $name" >&2
+      exit 2
+      ;;
+  esac
+
   # Match the skill name literally against each track dir's basename — do NOT
   # pass "$name" to `find -name`, which treats it as a shell glob pattern
   # (e.g. '*' would silently match an arbitrary skill).
