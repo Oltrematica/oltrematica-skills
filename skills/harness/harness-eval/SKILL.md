@@ -59,10 +59,12 @@ scripts/eval_run.py --validate .claude/eval_spec.json
 
 ### 2. Judge each prompt with a quorum of fresh, blind subagents
 
-Dispatch **three independent subagents per prompt** — a quorum, not a judge. Two
-constraints are non-negotiable. Break either one and nothing looks wrong: the
-table still fills in, the pass rate still looks great, and the evidence is
-worthless.
+Dispatch **three independent subagents per prompt** — a quorum, not a judge. Three
+constraints are non-negotiable. Break any one of them and nothing looks wrong:
+the table still fills in, the pass rate still looks great, and the evidence is
+worthless. All three fail this way — silently and flatteringly. None of them
+raises an error; each just hands you a clean, confident table built on evidence
+that cannot be trusted. That is why these are MUSTs, not suggestions.
 
 - **MUST: no tools.** Dispatch each judge with no filesystem or search access —
   no `Read`, `Grep`, `Glob`, nothing. A judge that can open the real SKILL.md body,
@@ -81,6 +83,17 @@ worthless.
   advantage the router never has, and the pass rate inflates accordingly.
   **Verify:** count the dispatches — for N prompts × 3 judges there must be 3N
   separate subagent calls, each with exactly one prompt in its context.
+- **MUST: pin the judge model.** Dispatch every judge in a run on the same
+  explicitly-named model — never the session's inherited default, and never
+  left to drift judge-to-judge. A quorum is only a quorum if its three judges
+  are drawn from the same distribution; three judges on three different models
+  are not a quorum, they are three different routers, and their disagreement
+  tells you nothing about your description's ambiguity. A judge answers one
+  short question, so the cheapest/fastest model tier is the right choice —
+  pinning it is a cost win as well as a correctness one; see the
+  `model-routing` skill for tier selection. **Verify:** check the model field
+  on every dispatch in the run; if it is unset or varies across the run's
+  judges, the run is void, not merely suspect.
 
 Each judge is given the skill's `description:` text and the one prompt, and asked
 exactly one thing:
@@ -197,3 +210,8 @@ harness *works*. For that: pin the behavior, change the harness, compare.
   set to calibrate against that the real router never has. Verify before you
   trust any result: were there 3N separate dispatches for N prompts, each
   holding exactly one prompt?
+- **Same pinned model, every judge, in every run.** An unpinned model means
+  each judge may silently run on a different router, and a split among them
+  then tells you nothing about your description — only that you used
+  different models. Verify before you trust any result: did every judge
+  dispatch in this run name the same explicit model?
