@@ -25,28 +25,28 @@ Background in [`docs/compliance/development-brief.md`](docs/compliance/developme
 
 ## Harness track
 
-*Planned — see [the design spec](docs/superpowers/specs/2026-07-14-harness-skills-track-design.md).*
-
 | Skill | Purpose |
 |-------|---------|
-| `harness-audit` | Inventories a repo's harness surfaces and reports present / gap / not applicable. |
-| `claude-md-authoring` | Writes and repairs `CLAUDE.md` — policy, not routing. |
-| `subagent-authoring` | Chooses between skill, subagent, command and hook — then authors it. |
-| `harness-eval` | Proves a skill fires when it should, and that a harness change actually helped. |
+| [`harness-audit`](skills/harness/harness-audit/) | Inventories a repo's harness surfaces (CLAUDE.md, skills, subagents, hooks, slash commands, MCP, verify gate, model routing policy) and reports present / gap / not applicable. Start here. |
+| [`claude-md-authoring`](skills/harness/claude-md-authoring/) | Writes and repairs `CLAUDE.md` — policy, not routing. Diagnoses "the agent keeps ignoring X". |
+| [`subagent-authoring`](skills/harness/subagent-authoring/) | Chooses between skill, subagent, command and hook — then authors it. |
+| [`harness-eval`](skills/harness/harness-eval/) | Proves a skill fires when it should, and that a harness change actually helped. |
+| [`model-routing`](skills/harness/model-routing/) | Decides which model tier a task needs, whether a subagent is the cheaper move, and why you keep hitting the usage limit. |
 
-These skills assume the [Superpowers](https://github.com/obra/superpowers) plugin
-is installed. They deliberately do not re-implement planning, TDD, debugging or
-code review — Superpowers owns those.
+These skills assume the [Superpowers](https://github.com/obra/superpowers) plugin is
+installed. They deliberately do not re-implement planning, TDD, debugging or code
+review — Superpowers owns those. Background: [`docs/harness/brief.md`](docs/harness/brief.md).
 
 ## Install
 
 ```bash
 git clone https://github.com/Oltrematica/oltrematica-skills.git /tmp/os
-/tmp/os/scripts/install.sh adr-management cra-evidence --to /path/to/your-repo
+/tmp/os/scripts/install.sh <skill-name>... --to /path/to/your-repo
 ```
 
-Skills install to `.claude/skills/<name>/`. Commit that directory so the team
-gets them on pull. Full options — personal scope, submodule, updating — in
+Run it with no arguments to list the available skills from both tracks. Skills
+install to `.claude/skills/<name>/`. Commit that directory so the team gets them
+on pull. Full options — personal scope, submodule, updating — in
 [`docs/distribution.md`](docs/distribution.md).
 
 ## Repo map
