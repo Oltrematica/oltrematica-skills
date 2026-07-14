@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+C="$ROOT/hooks/scripts/lib/claims.py"
+PASS=0; FAIL=0
+claims(){ printf '%s' "$1" | python3 "$C" >/dev/null 2>&1; echo $?; }
+yes_(){ if [ "$(claims "$1")" = "0" ]; then echo "  PASS: claims  | $1"; PASS=$((PASS+1));
+        else echo "  FAIL: should claim | $1"; FAIL=$((FAIL+1)); fi; }
+no_() { if [ "$(claims "$1")" = "1" ]; then echo "  PASS: doesn't | $1"; PASS=$((PASS+1));
+        else echo "  FAIL: false positive | $1"; FAIL=$((FAIL+1)); fi; }
+
+echo "-- claims completion --"
+yes_ "Done — the migration now has a working down()."
+yes_ "Fixed. The invoice test passes."
+yes_ "All tests pass."
+yes_ "Implemented the retry logic and everything is green."
+yes_ "That's complete — ready for review."
+
+echo "-- does NOT claim completion (false positives block real work) --"
+no_ "Done reading the file — here is what I found."
+no_ "I'm going to fix the failing test now."
+no_ "The tests should pass once we wire up the config."
+no_ "Should I run the test suite before continuing?"
+no_ "Here are three options; which do you want?"
+no_ "I've read through the controller but haven't changed anything yet."
+
+echo "-- degenerate input --"
+rc=$(printf '' | python3 "$C" >/dev/null 2>&1; echo $?)
+if [ "$rc" = "1" ]; then echo "  PASS: empty input = no claim"; PASS=$((PASS+1));
+else echo "  FAIL: empty input exit=$rc"; FAIL=$((FAIL+1)); fi
+
+echo
+echo "-- extra: long message, claim is the FINAL sentence --"
+LONG_TAIL_CLAIM="I looked at three different approaches for the retry logic: exponential backoff, a fixed delay queue, and a circuit breaker. I evaluated each against our latency budget and picked exponential backoff since it degrades gracefully under load. I wired it into the HTTP client and added the config knobs for max retries and base delay. Done — tests pass."
+yes_ "$LONG_TAIL_CLAIM"
+
+echo "-- extra: claim buried mid-message, trailing question keeps the turn open --"
+no_ "Fixed the parser. Should I also update the docs?"
+
+echo "-- extra: 'done' used non-terminally (more work is coming) --"
+no_ "Done with the analysis, now for the implementation."
+
+echo "-- extra: predictions are not results --"
+no_ "That should fix it."
+no_ "This ought to pass now."
+no_ "This should fix the bug and make all tests pass."
+
+echo "-- extra: a claim about something other than code still counts --"
+yes_ "Done — I've updated the README."
+
+echo "-- extra: past-tense narration that is not a completion claim --"
+no_ "I fixed a typo while I was in there, but the main bug is still open."
+
+echo "-- extra: markdown formatting around a real claim --"
+yes_ "**Done.**"
+yes_ "- [x] Fixed"
+
+echo "-- extra: a claim inside a code fence is quoted text, not an assertion --"
+FENCED=$'Here is an example of what NOT to do:\n\n```\nDone. All tests pass.\n```\n\nI haven\'t actually started fixing this yet.'
+no_ "$FENCED"
+
+echo "-- extra: hedged claim (flagged ambiguous in the report; judged no_ here) --"
+no_ "I think this is done, but I'm not 100% sure."
+
+echo
+echo "-- robustness: never a traceback --"
+rc=$( { head -c 4096 /dev/urandom | python3 "$C" >/dev/null 2>&1; echo $?; } )
+if [ "$rc" = "0" ] || [ "$rc" = "1" ]; then echo "  PASS: binary garbage exits 0/1 (rc=$rc)"; PASS=$((PASS+1));
+else echo "  FAIL: binary garbage exit=$rc"; FAIL=$((FAIL+1)); fi
+
+rc=$( { python3 -c "print('The quick brown fox jumps over the lazy dog. Done. ' * 20000)" | python3 "$C" >/dev/null 2>&1; echo $?; } )
+if [ "$rc" = "0" ] || [ "$rc" = "1" ]; then echo "  PASS: huge input (~1MB) exits 0/1 (rc=$rc)"; PASS=$((PASS+1));
+else echo "  FAIL: huge input exit=$rc"; FAIL=$((FAIL+1)); fi
+
+# Not asserting a specific verdict here: full-width/CJK punctuation is not
+# recognised as a sentence boundary by design (ASCII-only, see claims.py).
+# The global constraint is "never a traceback", not "classify every script
+# correctly" — so this only checks the process survives cleanly.
+rc=$( { printf '完了しました。すべてのテストは合格です。 🎉 Done — ready to ship.' | python3 "$C" >/dev/null 2>&1; echo $?; } )
+if [ "$rc" = "0" ] || [ "$rc" = "1" ]; then echo "  PASS: unicode input exits 0/1 without crashing (rc=$rc)"; PASS=$((PASS+1));
+else echo "  FAIL: unicode input exit=$rc"; FAIL=$((FAIL+1)); fi
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
