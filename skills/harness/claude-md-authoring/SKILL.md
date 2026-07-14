@@ -61,15 +61,7 @@ how you pay for it on every unrelated task.
 This is the most common reason this skill gets invoked, and the instinct — *add a
 stronger instruction, in caps* — makes it worse. Work the list in order:
 
-1. **Measure the length.** `wc -l CLAUDE.md`. The mechanism is not in dispute: every
-   line here loads into every context window and competes for the same attention —
-   rule 80 competes with rule 3. Whether *your* file has actually crossed the point
-   where that competition costs you is not something to assert from a line count;
-   it is something to measure. Use `harness-eval`'s behavioral-regression mode: trim
-   a candidate section, run the same task before and after, and see whether
-   anything actually moved. If it did, the fix is subtraction, not emphasis. If it
-   didn't, you have learned the section was already dead weight either way.
-2. **Classify every section as policy, procedure, or unverifiable exhortation.**
+1. **Classify every section as policy, procedure, or unverifiable exhortation.**
    Procedure is usually the bulk of it — each procedure section is a skill that has
    not been extracted yet, and extracting it shortens the file *and* makes the
    procedure available on demand, strictly better on both axes. Watch for a third
@@ -77,8 +69,19 @@ stronger instruction, in caps* — makes it worse. Work the list in order:
    good code," "don't break things." It reads like policy but carries no check, so
    it is not policy — it is noise wearing policy's clothes, diluting the rules that
    do work. It has exactly two honest outcomes: rewrite it as an imperative,
-   verifiable rule (step 3), or delete it. See `references/antipatterns.md`,
-   antipattern #2.
+   verifiable rule (step 3 below), or delete it. See `references/antipatterns.md`,
+   antipattern #2. This classification also gives you your candidates for the
+   next step: procedure and unverifiable-exhortation sections are the ones worth
+   testing for removal; policy sections are not.
+2. **Measure the length and effect.** `wc -l CLAUDE.md`. The mechanism is not in
+   dispute: every line here loads into every context window and competes for the
+   same attention — rule 80 competes with rule 3. Whether *your* file has actually
+   crossed the point where that competition costs you is not something to assert
+   from a line count; it is something to measure. Use `harness-eval`'s
+   behavioral-regression mode: trim one of the procedure or unverifiable-exhortation
+   sections flagged in step 1, run the same task before and after, and see whether
+   anything actually moved. If it did, the fix is subtraction, not emphasis. If it
+   didn't, you have learned the section was already dead weight either way.
 3. **Ask whether X must hold *every single time*.** If yes, it is not an
    instruction — it is a **hook**. Instructions are probabilistic; hooks are
    deterministic. "Always run the formatter after editing" belongs in
