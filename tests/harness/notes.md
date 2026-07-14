@@ -377,36 +377,40 @@ all — the observed shape for a succeeding call is exactly
 encode success/failure. That much matches the brief's "NOT available" branch
 literally.
 
-But the empirical evidence is stronger and more useful than the brief
-anticipated: **`PostToolUse` (matcher `Bash`) is not invoked at all when the
-underlying command exits non-zero.** This was reproduced six times, with
-command order varied, in isolation, and with realistic test-runner-shaped
-stdout, with zero exceptions. This is a mechanical fact about *when the hook
-fires*, not a value read out of its payload, so it does not fall foul of the
-brief's "no string-matching heuristics" warning — nothing is parsed or
+The empirical evidence corroborates a **documented** contract, not a
+version-specific quirk: Claude Code's own documentation specifies that
+`PostToolUse` fires "after a tool call succeeds," with a separate
+`PostToolUseFailure` event delivered for failing tool calls. **`PostToolUse`
+(matcher `Bash`) is therefore not invoked when the underlying command exits
+non-zero** — this is the documented behavior, not something inferred solely
+from observation. The probe above reproduced it six times, with command order
+varied, in isolation, and with realistic test-runner-shaped stdout, with zero
+exceptions, as belt-and-braces confirmation that the documented contract
+matches the shipped implementation. This is a mechanical fact about *when the
+hook fires*, not a value read out of its payload, so it does not fall foul of
+the brief's "no string-matching heuristics" warning — nothing is parsed or
 inferred from output text; the signal is "did the hook fire for a
 test-matching command in this turn, yes or no."
 
 **Design consequence for Task 3 (`record_activity.sh`):** because a failing
-Bash command never reaches the hook, if the hook fires for a command matching
-the test-runner pattern, that command exited zero (in this Claude Code CLI
-version — see caveat below). `record_activity.sh` may therefore record
+Bash command never reaches the `PostToolUse` hook (by documented contract),
+if the hook fires for a command matching the test-runner pattern, that
+command exited zero. `record_activity.sh` may therefore record
 `test_evidence="passed"` for a matching invocation, *not* by inspecting a
-field, but by the simple fact of having been invoked at all for that command.
-No `test_evidence="ran"`-only degradation is required by the current
-platform behavior.
+field, but by the simple fact of having been invoked at all for that command
+— this is the guarantee that the hook's block decision rests on: the tests
+actually **passed**, not merely that they ran. No `test_evidence="ran"`-only
+degradation is required.
 
-**Caveat — must be stated loudly per the brief, and is:** this is
-version-specific, undocumented harness behavior of Claude Code CLI
-`2.1.207`, discovered empirically, not documented API contract. If a future
-Claude Code version starts invoking `PostToolUse` on failing Bash calls (e.g.
-to let hooks react to failures), `record_activity.sh`'s "fired ⇒ passed"
-inference would then be wrong — it would need to move to whatever field the
-new version adds. This caveat is repeated in `hooks/scripts/lib/state.sh`'s
-header comment and must also be carried into `record_activity.sh`'s
+**Note, stated for completeness:** relying on a documented event-firing
+contract is still relying on the platform's current documented behavior — if
+a future Claude Code version changes what `PostToolUse` fires on, this
+inference would need to move with it. That risk is materially smaller than an
+undocumented quirk would carry, since a documented contract change is a
+breaking API change subject to the platform's own compatibility expectations,
+not a silent behavioral drift. This note is carried into `record_activity.sh`'s
 implementation notes (Task 3), its block message wording, and the rollout
-note (Task 6+), per the brief's instruction to say this loudly rather than
-claim a stronger guarantee than we have.
+note (Task 6+).
 
 Probe cleanup verified: scratch dir and `/tmp/hookprobe` removed;
 `~/.claude/settings.json` and this repo's tree contain no trace of the probe

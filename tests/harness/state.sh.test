@@ -49,6 +49,34 @@ p="$(state_path '../../etc/passwd')"
 check "no traversal" "yes" \
   "`case "$p" in "$OLTREMATICA_STATE_DIR"/*) echo yes;; *) echo no;; esac`"
 
+echo "8. concurrent state_set calls do not lose updates (race regression)"
+R=race-session
+state_set $R base 0
+i=0
+while [ "$i" -lt 20 ]; do
+  ( state_set $R "key$i" "$((100 + i))" ) &
+  i=$((i + 1))
+done
+wait
+i=0
+lost=0
+while [ "$i" -lt 20 ]; do
+  got="$(state_get $R "key$i")"
+  if [ "$got" != "$((100 + i))" ]; then
+    lost=$((lost + 1))
+    echo "    lost update: key$i expected '$((100 + i))' got '$got'"
+  fi
+  i=$((i + 1))
+done
+check "no update lost under 20 concurrent state_set calls" "0" "$lost"
+
+echo "9. very long session ids do not break state_set (ENAMETOOLONG)"
+LONGSID=$(python3 -c "print('a' * 5000)")
+state_set "$LONGSID" some_key 42
+check "long session id survives set/get" "42" "$(state_get "$LONGSID" some_key)"
+check "state_path is truncated to a safe length" "yes" \
+  "$(p=$(state_path "$LONGSID"); b=$(basename "$p" .json); [ ${#b} -le 64 ] && echo yes || echo no)"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
