@@ -13,7 +13,8 @@
         {"prompt": "onboard this project, and audit whether CLAUDE.md needs work", "expect": "no-trigger"},
         {"prompt": "should our onboarding docs mention Claude Code setup", "expect": "no-trigger"},
         {"prompt": "are we CRA ready?", "expect": "no-trigger"},
-        {"prompt": "check if our CLAUDE.md is missing important policy sections", "expect": "no-trigger"}
+        {"prompt": "check if our CLAUDE.md is missing important policy sections", "expect": "no-trigger"},
+        {"prompt": "does our .claude setup meet CRA requirements for AI-assisted development?", "expect": "no-trigger"}
       ]
     },
     {
