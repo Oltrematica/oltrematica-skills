@@ -50,8 +50,8 @@ evidence* ("check", "scan", "generate", "what changed"), not about
 *deciding or explaining a choice*. "Why did we choose Redis for queues?"
 and "bump lodash patch version" don't match that anchor pattern in either
 skill's description. Because no row actually failed, cra-evidence's
-description was left unedited (frozen text still matches Task 11's
-committed version) and adr-management's stayed frozen as instructed.
+description was left unedited (frozen text still matches the version already
+committed) and adr-management's stayed frozen as instructed.
 
 This is a close call rather than a comfortable one — the phrasing works
 today because the example anchors are specific, but it would be worth

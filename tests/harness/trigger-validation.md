@@ -8,11 +8,12 @@ one prompt per judge (never all 10 prompts to one judge, which would let a judge
 calibrate on the set instead of judging the single utterance the router actually
 sees). Spec: [`eval_spec.json`](eval_spec.json). Date: 2026-07-14.
 
-This is Task 14: `model-routing` (Task 13) just landed as a fifth harness skill, so
-every existing description is potentially cross-triggering with it — the whole
-5-skill spec was rebuilt and re-run, not just the new skill. It also folds in three
-findings carried over from Task 11's adversarial review (A, B, C) and one
-cross-trigger finding discovered while scoping this task (H, `subagent-authoring`
+This round covers all five harness skills together: `model-routing` had just
+landed as the fifth harness skill, so every existing description was potentially
+cross-triggering with it — the whole 5-skill spec was rebuilt and re-run, not just
+the new skill. It also folds in three findings carried over from an earlier
+adversarial review of the whole harness track (A, B, C) and one cross-trigger
+finding discovered while scoping this round (H, `subagent-authoring`
 vs. `model-routing` on "model tier"). Judge model: Claude Haiku, dispatched via the
 `general-purpose` subagent type with an explicit no-tools instruction in every
 dispatch prompt (see "Notes on the harness-eval procedure" at the end — this
@@ -49,8 +50,8 @@ exclusion. **9/10 PASS, 1/10 FLAKY.**
 
 ## Fix 1 applied to harness-audit (after round 1)
 
-Task 11's original carve-out quoted the losing prompt ("our CLAUDE.md is too
-long") almost verbatim — Finding B named this as teaching to the test. This task's
+An earlier round's original carve-out quoted the losing prompt ("our CLAUDE.md is too
+long") almost verbatim — Finding B named this as teaching to the test. This round's
 first fix instead stated a general rule: a CLAUDE.md content judgement excludes the
 whole request even when paired with onboarding vocabulary in the same sentence.
 Wording added: *"...and that holds even when the same request pairs a genuine
@@ -541,8 +542,8 @@ surface real under-triggering before it passed.
 ## Notes on the harness-eval procedure itself (second real use)
 
 Following `skills/harness/harness-eval/SKILL.md` Mode 1 literally, now hardened
-with explicit MUSTs after Task 11, surfaced one point not fully resolved by the
-hardening:
+with explicit MUSTs added after an earlier adversarial review, surfaced one point
+not fully resolved by the hardening:
 
 1. **The skill still does not specify a mechanism for zero-tool dispatch, only the
    requirement that one exist.** Mode 1 now says plainly "MUST: no tools... check
@@ -558,7 +559,7 @@ hardening:
    returned usage metadata — so no judge actually exercised a tool. But this is a
    prompt-level convention enforced by inspection after the fact, not a structural
    guarantee enforced before dispatch, and it is the same workaround the prior
-   (Task 11) run adopted. The skill's MUST is satisfiable in this harness only by
+   (earlier adversarial-review) run adopted. The skill's MUST is satisfiable in this harness only by
    this workaround; it would be stronger if Mode 1 named the workaround
    explicitly (e.g., "if no zero-tool subagent type exists, dispatch the
    general-purpose type with an explicit no-tool instruction, and verify `tool_uses:
@@ -595,7 +596,7 @@ dispatch was checked for `tool_uses: 0` and (after point 2's incident) a pinned
 `haiku` model — but a third team running this without having read prior reports
 would rediscover the same gaps.
 
-## Task 7: claim-detector quorum (`hooks/scripts/lib/claims.py`)
+## The claim-detector quorum (`hooks/scripts/lib/claims.py`)
 
 This is a different kind of eval from everything above: not "does a skill
 description trigger correctly" but "does a hand-written classifier agree with
@@ -998,12 +999,13 @@ guard). Both were caught and closed during development, not shipped.
   + 3 FLAKY + 0 FAIL (samples C1–C15/N1–N15, unchanged from round 2) + 9
   PASS + 2 FLAKY + 0 FAIL (samples C16–C23/N16–N18, round 3) = **36 PASS + 5
   FLAKY + 0 FAIL = 41 ✓**.
-- Task 7 total blind-quorum judgements across all rounds: 90 + 33 = **123**.
+- Total blind-quorum judgements for the claim-detector quorum across all rounds:
+  90 + 33 = **123**.
 - Combined with this file's other tracks (harness-audit /
   claude-md-authoring / subagent-authoring / harness-eval / model-routing:
-  372 judgements; Task 7 rounds 1–2: 90 judgements — **462** stated at the
-  end of the round-2 section above): **462 + 33 = 495 judgements total
-  across this file.**
+  372 judgements; claim-detector quorum rounds 1–2: 90 judgements — **462**
+  stated at the end of the round-2 section above): **462 + 33 = 495 judgements
+  total across this file.**
 
 ### Honesty check — round 3 is not a clean sweep either
 

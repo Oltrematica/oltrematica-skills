@@ -155,30 +155,59 @@ check before it gets reported as a finding.
 This is the section a skeptical reader should check hardest, because it's
 also the one this repo is least entitled to get away with asserting.
 
-### 121 automated checks, three suites
+### 435 automated checks, nine suites
 
 ```
-tests/install.sh.test               32 checks   — the installer: flat layout, track
-                                                    ambiguity, glob-name rejection,
-                                                    reinstall behavior
-tests/harness/inventory.sh.test      35 checks   — inventory.sh's fact-finding, incl.
-                                                    the fence-aware model-routing
-                                                    heading detector and a missing-
-                                                    python3 failure mode
-tests/harness/eval_run.py.test       54 checks   — the trigger-eval tooling itself:
-                                                    spec validation, hostile input
-                                                    (newlines, pipes, injected table
-                                                    rows) rejected before it can
-                                                    corrupt a Markdown table
-                                                    ---
-                                                    121 total
+tests/harness/verify_gate.sh.test        137 checks — stack detection and test-command
+                                                        matching across 8 ecosystems
+                                                        (PHP, Node, Python, Go, Rust,
+                                                        Ruby, Java/Kotlin, .NET, Elixir)
+tests/harness/state.sh.test               13 checks — the hook's key/value state store,
+                                                        incl. an ENAMETOOLONG session-id
+                                                        edge case
+tests/harness/record_activity.sh.test     59 checks — PostToolUse activity recording:
+                                                        which Bash patterns count as a
+                                                        source edit, which count as a
+                                                        passing test run
+tests/harness/source_mutation.py.test     40 checks — the Bash-command text heuristic
+                                                        that decides "did this command
+                                                        just write to a file"
+tests/harness/claims.py.test              46 checks — the completion-claim regex:
+                                                        binary garbage, ~1MB input, and
+                                                        unicode all exit clean, no crash
+tests/harness/verify_before_done.sh.test  19 checks — the Stop hook itself: allow/block
+                                                        decisions, stand-down conditions
+tests/harness/inventory.sh.test           35 checks — inventory.sh's fact-finding, incl.
+                                                        the fence-aware model-routing
+                                                        heading detector and a missing-
+                                                        python3 failure mode
+tests/harness/eval_run.py.test            54 checks — the trigger-eval tooling itself:
+                                                        spec validation, hostile input
+                                                        (newlines, pipes, injected table
+                                                        rows) rejected before it can
+                                                        corrupt a Markdown table
+tests/install.sh.test                     32 checks — the installer: flat layout, track
+                                                        ambiguity, glob-name rejection,
+                                                        reinstall behavior
+                                                        ---
+                                                        435 total
 ```
 
-Run yourself: `bash tests/install.sh.test`, `bash tests/harness/inventory.sh.test`,
-`bash tests/harness/eval_run.py.test`. All three passed 100% at the point this
-README was written (32/32, 35/35, 54/54) — re-run them; a README claiming a
-number is exactly the kind of unverified assertion this repo's contract
-exists to prevent.
+Run yourself:
+
+```bash
+for t in tests/harness/verify_gate.sh.test tests/harness/state.sh.test \
+         tests/harness/record_activity.sh.test tests/harness/source_mutation.py.test \
+         tests/harness/claims.py.test tests/harness/verify_before_done.sh.test \
+         tests/harness/inventory.sh.test tests/harness/eval_run.py.test \
+         tests/install.sh.test; do bash "$t"; done
+```
+
+All nine passed 100% at the point this README was written (137/137, 13/13,
+59/59, 40/40, 46/46, 19/19, 35/35, 54/54, 32/32) — re-run them; a README
+claiming a number is exactly the kind of unverified assertion this repo's
+contract exists to prevent. CI (`.github/workflows/ci.yml`) runs the same
+nine suites on `ubuntu-latest` and `macos-latest` on every PR.
 
 ### A fixture that is deliberately broken
 

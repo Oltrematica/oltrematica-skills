@@ -40,12 +40,12 @@ block it provides contains 10 `check` calls (4 + 2 + 3 + 1 across its four
 scenarios), so the correct expectation for the brief's own test is
 `PASS=10 FAIL=0`. Confirmed by direct count and by running the script.
 
-## 2026-07-14 — collateral fix while building harness-audit (Task 7)
+## 2026-07-14 — collateral fix while building harness-audit
 
 Scenario 10 ("skill name ambiguous across tracks") built its fixture at
 `skills/harness/adr-management/` and its cleanup ran
 `rm -rf "$REPO_ROOT/skills/harness"` — safe only while `skills/harness/` had
-no real content. Task 7 adds `skills/harness/harness-audit/`, so running this
+no real content. Adding `skills/harness/harness-audit/` means running this
 test would have deleted that skill. Fixed `cleanup_fixture` to remove only the
 fixture subdirectory it creates. Re-ran: `PASS=25 FAIL=0`, and confirmed
 `skills/harness/harness-audit/` survives the run intact.

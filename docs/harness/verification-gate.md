@@ -13,8 +13,8 @@ The gate blocks an agent from ending its turn with a completion claim
 modified after the last passing test run** in that session. It does nothing
 else. No secrets scanning, no dependency blocking, no main-branch
 protection, no auto-formatting, no cost coaching — those were deliberately
-cut from this change (see the design spec's non-goals) so this hook stays
-one rule, easy to reason about, and easy to trust.
+left out of scope so this hook stays one rule, easy to reason about, and
+easy to trust.
 
 When it blocks, the agent sees exactly one instruction: run the test
 command and report the real output. That is the entire escape hatch. There
@@ -65,8 +65,9 @@ it has earned:
   `hooks/scripts/lib/claims.py` is a regex, not a language model. It has
   already missed a real completion claim once, in a 30-sample blind quorum
   of independent judges used to grade it (`tests/harness/trigger-validation.md`,
-  Task 7) — a message reporting "the migration issue is fixed... everything
-  is green" wasn't sentence-initial and slipped past the original pattern.
+  "The claim-detector quorum" section) — a message reporting "the migration
+  issue is fixed... everything is green" wasn't sentence-initial and slipped
+  past the original pattern.
   That specific gap was found and fixed, but a regex detector can always be
   written around by different phrasing than the corpus tested — there is no
   claim this is exhaustive. A miss here means the gate stays silent, not

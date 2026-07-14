@@ -93,8 +93,8 @@ paths, and a missing `python3`.
 The "inventory.sh" entry above (`## 2026-07-14 — inventory.sh`) is left
 unedited as the honest record of what was true when it was written: at that
 point `inventory.sh` reported **seven** surfaces and the harness track had
-**four** skills. Both grew later the same day (Task 13 added `model-routing`
-as the fifth harness skill; Task 14 added it as `inventory.sh`'s eighth
+**four** skills. Both grew later the same day (`model-routing` was added
+as the fifth harness skill, and then as `inventory.sh`'s eighth
 audited surface, `model_routing`) — see
 `skills/harness/harness-audit/scripts/inventory.sh` (now emits eight JSON
 keys) and `tests/harness/trigger-validation.md` (now covers five skills).
@@ -278,7 +278,7 @@ procedure — quorum of 3 fresh, blind subagents per prompt, a 3-value verdict
 regression with an adversarial skeptic subagent) for the CLAUDE.md-change use
 case the other three skills don't cover.
 
-## 2026-07-14 — state.sh, and the empirical `tool_response` probe (Task 2, verification-hook track)
+## 2026-07-14 — state.sh, and the empirical `tool_response` probe (verification-hook track)
 
 ### Step 1: empirical probe — is a Bash exit status observable from `tool_response`?
 
@@ -392,7 +392,7 @@ the brief's "no string-matching heuristics" warning — nothing is parsed or
 inferred from output text; the signal is "did the hook fire for a
 test-matching command in this turn, yes or no."
 
-**Design consequence for Task 3 (`record_activity.sh`):** because a failing
+**Design consequence for `record_activity.sh`:** because a failing
 Bash command never reaches the `PostToolUse` hook (by documented contract),
 if the hook fires for a command matching the test-runner pattern, that
 command exited zero. `record_activity.sh` may therefore record
@@ -409,8 +409,7 @@ inference would need to move with it. That risk is materially smaller than an
 undocumented quirk would carry, since a documented contract change is a
 breaking API change subject to the platform's own compatibility expectations,
 not a silent behavioral drift. This note is carried into `record_activity.sh`'s
-implementation notes (Task 3), its block message wording, and the rollout
-note (Task 6+).
+implementation notes and its block message wording below.
 
 Probe cleanup verified: scratch dir and `/tmp/hookprobe` removed;
 `~/.claude/settings.json` and this repo's tree contain no trace of the probe
@@ -478,13 +477,13 @@ directory, and session-id sanitisation (`tr -c 'A-Za-z0-9._-' '_'`) that keeps
 every state file inside `OLTREMATICA_STATE_DIR` regardless of input,
 confirmed against a literal `../../etc/passwd` session id.
 
-## Task 5: `verify_before_done.sh` — the Stop hook
+## `verify_before_done.sh` — the Stop hook
 
 **Bug found in the brief's own sample `field()` helper (not copied):** the
 brief pipes `$PAYLOAD` into `python3 - "$1" <<'PY' ... PY`, i.e. a pipe AND a
 heredoc on the same command. The heredoc consumes stdin, so the piped payload
 never reaches Python — every field extraction silently returns empty. This
-was already diagnosed and fixed in `record_activity.sh` (Task 3): pass the
+was already diagnosed and fixed in `record_activity.sh`: pass the
 payload as `argv[2]` instead of piping it. `verify_before_done.sh` reuses
 that exact pattern (see the `field()` comment in the script) rather than
 reinventing or copying the broken version.
@@ -647,7 +646,7 @@ explicit numeric-guard (`case ... in ''|*[!0-9]*) exit 0 ;; esac`) on both
 or non-numeric state value fails open immediately instead of relying on
 `-eq`'s error behaviour under `set -uo pipefail`.
 
-## Task 6: plugin packaging — real platform proof, not synthetic stdin
+## Plugin packaging — real platform proof, not synthetic stdin
 
 Environment: `claude` 2.1.207. Every command below was actually run; output is
 pasted verbatim (only long unrelated permission-list JSON was elided).
@@ -860,7 +859,7 @@ this repo (a stale Laravel Herd PHP ini pointing at a missing
 `herd-84-arm64.so` extension) — the model's own first `composer test` call
 failed with exit 255. Because Claude Code only fires `PostToolUse` on a
 **successful** Bash call (documented behaviour, corroborated in this repo's
-own Task 2 probe above), `record_activity.sh` never ran for that failed call,
+own `tool_response` probe above), `record_activity.sh` never ran for that failed call,
 so `last_test_pass` was never set. The model then edited the file (Edit
 *does* trigger `PostToolUse` regardless of the edited content's correctness),
 setting `last_source_edit`. It then tried to end the turn with the exact
