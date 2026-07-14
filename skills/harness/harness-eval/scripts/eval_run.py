@@ -32,6 +32,13 @@ way a human can type):
   each is type-checked before `.get()` is called on it.
 - `prompts` / `regressions` may be missing or of the wrong type entirely.
 - A `prompt` may be missing, non-string, empty, or whitespace-only.
+- A skill's `name` is rendered as a markdown heading immediately followed by
+  its table, so it is validated exactly as strictly as `prompt`: it must be
+  a non-empty string with no `|`, newline, or carriage return, rejected at
+  --validate time naming the offending skill index. A `name` containing a
+  newline plus a well-formed `| n | ... |` line could otherwise inject a
+  forged table row that survives structural checks (every data row starts
+  with `|`, row count == prompt count) undetected.
 - A prompt containing a literal `|` would otherwise corrupt the markdown table
   emitted by --emit-table; it is escaped.
 - A prompt containing a literal newline or carriage return would otherwise
@@ -39,9 +46,10 @@ way a human can type):
   line ending too, per CommonMark) — this is rejected at --validate time,
   naming the offending prompt, rather than silently mangled at render time.
 - `emit_table()` also defensively neutralizes any newline, carriage return,
-  or tab that still reaches it (e.g. via `regressions[].expect_observable`,
-  a field --validate does not scrutinize) so it can never emit a
-  structurally broken table even if a future code path bypasses validation.
+  tab, or pipe that still reaches it in `skill['name']` or
+  `regressions[].expect_observable` (fields --validate does not fully
+  scrutinize, or a --validate-bypassing future code path) so it can never
+  emit a structurally broken table.
 - The spec file may not exist, may be a directory, may not be valid UTF-8, or
   may not be valid JSON — each produces one actionable stderr line, never a
   traceback.
@@ -93,7 +101,20 @@ def validate(spec, path):
             )
             continue
 
-        name = skill.get("name") or f"<skills[{i}] has no name>"
+        raw_name = skill.get("name")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            problems.append(f"skills[{i}]: 'name' must be a non-empty string")
+            name = f"<skills[{i}] has no name>"
+        elif "\n" in raw_name or "\r" in raw_name or "|" in raw_name:
+            problems.append(
+                f"skills[{i}]: name {raw_name!r} contains a newline, carriage "
+                f"return, or pipe; it is rendered as a markdown heading with "
+                f"a table immediately below it, so any of these characters "
+                f"could split the heading across lines or forge a table row"
+            )
+            name = f"<skills[{i}]: invalid name>"
+        else:
+            name = raw_name
         prompts = skill.get("prompts")
         if not isinstance(prompts, list):
             problems.append(f"{name}: 'prompts' must be a list")
@@ -184,7 +205,7 @@ def _table_cell(text):
 def emit_table(spec):
     out = []
     for skill in spec["skills"]:
-        out.append(f"## {skill['name']}")
+        out.append(f"## {_table_cell(skill['name'])}")
         out.append("")
         out.append("| # | Prompt | Expected | Verdict | Judges |")
         out.append("|---|--------|----------|---------|--------|")

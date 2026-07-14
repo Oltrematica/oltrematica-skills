@@ -218,6 +218,62 @@ check "13 data rows total (10 prompts + 3 regressions), each starting with |" "1
 TOTAL_LINES=$(echo "$OUT" | wc -l | tr -d ' ')
 check "document has exactly 22 physical lines (no row split across lines)" "22" "$TOTAL_LINES"
 
+echo "20. a skill name containing a newline is rejected at --validate"
+python3 - "$TMP/name-newline.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(5)] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "Alpha\nBeta", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/name-newline.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+check "names the offending skill" "yes" "$(echo "$ERR" | grep -qi "skills\[0\]" && echo yes || echo no)"
+
+echo "21. a skill name containing a pipe is rejected at --validate"
+python3 - "$TMP/name-pipe.json" <<'PY'
+import json, sys
+p = [{"prompt": f"pos {i}", "expect": "trigger"} for i in range(5)] + \
+    [{"prompt": f"neg {i}", "expect": "no-trigger"} for i in range(5)]
+json.dump({"skills": [{"name": "Weird | Name", "prompts": p}]}, open(sys.argv[1], "w"))
+PY
+ERR=$(python3 "$EVAL" --validate "$TMP/name-pipe.json" 2>&1); RC=$?
+check "exit 2" "2" "$RC"
+check "no traceback" "no" "$(no_traceback "$ERR")"
+check "names the offending skill" "yes" "$(echo "$ERR" | grep -qi "skills\[0\]" && echo yes || echo no)"
+
+echo "22. structural: emit_table's belt-and-braces defense neutralizes a hostile"
+echo "    name even if a future code path bypasses --validate entirely"
+OUT=$(python3 - "$EVAL" <<'PY'
+import importlib.util, sys
+
+spec_mod = importlib.util.spec_from_file_location("eval_run", sys.argv[1])
+eval_run = importlib.util.module_from_spec(spec_mod)
+spec_mod.loader.exec_module(eval_run)
+
+# A name crafted to look like it injects a well-formed extra table row —
+# the exact shape the existing structural checks (row count == prompt
+# count, every data row starts with "|") cannot distinguish from a real
+# row unless emit_table() neutralizes it itself.
+hostile_name = 'Alpha\n| 99 | "forged" | trigger | PASS | none |'
+spec = {
+    "skills": [
+        {"name": hostile_name, "prompts": [{"prompt": "only prompt", "expect": "trigger"}]}
+    ]
+}
+import re
+rendered = eval_run.emit_table(spec)
+lines = rendered.split("\n")
+data_rows = [l for l in lines if re.match(r"^\| \d+ \|", l)]
+assert len(data_rows) == 1, f"expected exactly 1 real data row, got {len(data_rows)}: {data_rows}"
+assert lines[0].startswith("## Alpha"), f"heading mangled: {lines[0]!r}"
+assert "\n" not in rendered.split("\n", 1)[0], "heading still contains a raw newline"
+print("OK")
+PY
+); RC=$?
+check "exit 0 (no assertion failure)" "0" "$RC"
+check "prints OK" "OK" "$OUT"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
