@@ -47,13 +47,35 @@ fi
 [ -d "$TARGET" ] || { echo "ERROR: target repo not found: $TARGET" >&2; exit 2; }
 
 for name in "${SKILLS[@]}"; do
-  src=$(find "$REPO_ROOT/skills" -mindepth 2 -maxdepth 2 -type d -name "$name" | head -1)
-  if [ -z "$src" ]; then
+  # Match the skill name literally against each track dir's basename — do NOT
+  # pass "$name" to `find -name`, which treats it as a shell glob pattern
+  # (e.g. '*' would silently match an arbitrary skill).
+  MATCHES=()
+  for track_dir in "$REPO_ROOT"/skills/*/; do
+    [ -d "$track_dir" ] || continue
+    candidate="${track_dir}${name}"
+    if [ -d "$candidate" ] && [ "$(basename "$candidate")" = "$name" ]; then
+      MATCHES+=("$candidate")
+    fi
+  done
+
+  if [ ${#MATCHES[@]} -eq 0 ]; then
     echo "ERROR: no skill named '$name' in this repo." >&2
     echo "Available skills:" >&2
     available | sed 's/^/  - /' >&2
     exit 1
   fi
+
+  if [ ${#MATCHES[@]} -gt 1 ]; then
+    echo "ERROR: skill name '$name' is ambiguous — it exists in more than one track:" >&2
+    for m in "${MATCHES[@]}"; do
+      echo "  - $(basename "$(dirname "$m")")/$name" >&2
+    done
+    echo "Resolve by renaming one of the skills so the name is unique." >&2
+    exit 1
+  fi
+
+  src="${MATCHES[0]}"
   dest="$TARGET/.claude/skills/$name"
   mkdir -p "$(dirname "$dest")"
   rm -rf "$dest"

@@ -75,6 +75,33 @@ check "SKILL.md still present after reinstall" "yes" \
   "$([ -f "$STALE_TARGET/.claude/skills/adr-management/SKILL.md" ] && echo yes || echo no)"
 rm -rf "$STALE_TARGET"
 
+echo "9. glob metacharacter as a skill name is rejected, not silently resolved"
+GLOB_TARGET=$(mktemp -d)
+ERR=$(bash "$INSTALL" '*' --to "$GLOB_TARGET" 2>&1); RC=$?
+check "exit code" "1" "$RC"
+check "no literal '*' directory created anywhere under target" "no" \
+  "$(find "$GLOB_TARGET" -depth -type d 2>/dev/null | grep -q '/\*$' && echo yes || echo no)"
+check "nothing installed under .claude/skills" "no" \
+  "$([ -d "$GLOB_TARGET/.claude/skills" ] && echo yes || echo no)"
+rm -rf "$GLOB_TARGET"
+
+echo "10. skill name ambiguous across tracks fails loudly and names both tracks"
+HARNESS_FIXTURE="$REPO_ROOT/skills/harness/adr-management"
+cleanup_fixture() { rm -rf "$REPO_ROOT/skills/harness"; }
+trap 'cleanup_fixture; rm -rf "$TARGET"' EXIT
+mkdir -p "$HARNESS_FIXTURE"
+echo "# fixture" > "$HARNESS_FIXTURE/SKILL.md"
+AMBIG_TARGET=$(mktemp -d)
+ERR=$(bash "$INSTALL" adr-management --to "$AMBIG_TARGET" 2>&1); RC=$?
+check "exit code" "1" "$RC"
+check "names the compliance track" "yes" \
+  "$(echo "$ERR" | grep -q "compliance/adr-management" && echo yes || echo no)"
+check "names the harness track" "yes" \
+  "$(echo "$ERR" | grep -q "harness/adr-management" && echo yes || echo no)"
+rm -rf "$AMBIG_TARGET"
+cleanup_fixture
+trap 'rm -rf "$TARGET"' EXIT
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
