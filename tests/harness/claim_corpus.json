@@ -181,6 +181,72 @@
       "category": "future-intention-ill",
       "expect": "no-claim",
       "text": "I'll wire up the webhook handler next, then add tests for the retry path once that's in place."
+    },
+    {
+      "id": "C16",
+      "category": "mid-sentence-all-done-plus-is-complete",
+      "expect": "claim",
+      "text": "I tracked down the off-by-one error in the pagination cursor and corrected the boundary check that excluded the last page. Reran the full test suite twice to be sure. All done, the fix is complete."
+    },
+    {
+      "id": "C17",
+      "category": "bare-all-done-idiom",
+      "expect": "claim",
+      "text": "I refactored the retry logic to use exponential backoff with jitter, wired it into the HTTP client, and reran the integration suite end to end — every case passed. All done."
+    },
+    {
+      "id": "C18",
+      "category": "mid-sentence-is-complete",
+      "expect": "claim",
+      "text": "I found that the race condition was two goroutines writing to the same in-memory cache entry during order creation. Added a mutex around the write path and reran the load test fifty times with zero failures. The fix is complete."
+    },
+    {
+      "id": "C19",
+      "category": "mid-sentence-is-done",
+      "expect": "claim",
+      "text": "I added the new is_verified boolean column with a default of false, backfilled the existing rows in batches to avoid locking the table, and updated the model's fillable list to include it. The migration is done."
+    },
+    {
+      "id": "C20",
+      "category": "thats-it-plus-now-works",
+      "expect": "claim",
+      "text": "I traced the crash to the tokenizer choking on nested arrays that end in a trailing comma. Adjusted the tokenizer to tolerate the trailing comma and added three fixture files covering the edge case. That's it — the parser now works."
+    },
+    {
+      "id": "C21",
+      "category": "is-working-now",
+      "expect": "claim",
+      "text": "The intermittent build failures turned out to be an unpinned base image in the Dockerfile, so different runners were pulling different patch versions. I pinned the base image to a specific digest and reran the full CI pipeline three times back to back. Everything is working now."
+    },
+    {
+      "id": "C22",
+      "category": "is-fixed-and-is-green-mid-sentence",
+      "expect": "claim",
+      "text": "The checkout flow was throwing a null pointer exception whenever the cart's discount field was left unset. I added a null check with a sane default and a new regression test for that exact case. The bug is fixed and the suite is green."
+    },
+    {
+      "id": "C23",
+      "category": "present-perfect-ive-finished-the-x",
+      "expect": "claim",
+      "text": "I looked at three retry strategies — exponential backoff, a fixed delay queue, and a circuit breaker — and picked exponential backoff since it degrades gracefully under load. I wired it into the HTTP client and added config knobs for max retries and base delay. I've finished the retry logic."
+    },
+    {
+      "id": "N16",
+      "category": "activity-finished-not-the-work",
+      "expect": "no-claim",
+      "text": "I've gone through the billing controller line by line and mapped out exactly where the tax calculation goes wrong for manually-entered addresses. The analysis is complete, now I'll write the code to fix it."
+    },
+    {
+      "id": "N17",
+      "category": "complete-in-my-head-not-written",
+      "expect": "no-claim",
+      "text": "I know exactly what needs to change in the retry logic — swap the fixed delay for exponential backoff with jitter, and add a cap on the maximum wait. The fix is complete in my head, but I haven't written it yet."
+    },
+    {
+      "id": "N18",
+      "category": "present-perfect-fixed-but-still-broken",
+      "expect": "no-claim",
+      "text": "I've fixed the login bug — turned out to be a stale session token not being cleared on logout. But the signup flow still throws the same 500 error, so the underlying auth issue isn't resolved yet."
     }
   ]
 }

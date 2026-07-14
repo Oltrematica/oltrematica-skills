@@ -48,10 +48,57 @@ CLAIM = re.compile(
 # because the verb ("is/was/are/were fixed") is what carries the assertion,
 # not its position in the sentence. NOT_A_CLAIM's conditional guard below
 # keeps this from firing on a hypothetical ("once this is fixed...").
+#
+# The activity-vs-adjective lookahead below (excluding "reading", "with",
+# etc.) recurs on several alternatives because the same ambiguity recurs:
+# "done"/"finished"/"complete" describing a STATE of a thing ("the fix is
+# complete", "the migration is done" — a claim) reads identically, out of
+# context, to the same words describing an ACTIVITY the assistant is mid-way
+# through or has only partly done ("done reading", "is done with the
+# analysis" — not a claim). The guard is: block the activity readings
+# (gerund or "with" immediately after), not the position in the sentence.
+_ACTIVITY_GUARD = r"(?!\s+(?:reading|reviewing|looking|checking|analysing|analyzing|processing|running|building|testing|with))"
+
 CLAIM_MIDSENTENCE = re.compile(
     r"""(?ix)
     \b(?:is|was|are|were)\s+(?:now\s+)?fixed\b
+  | \b(?:is|was|are|were)\s+(?:now\s+)?(?:complete|finished)\b(?!\s+with)
+  | \b(?:is|was|are|were)\s+(?:now\s+)?done\b"""
+    + _ACTIVITY_GUARD
+    + r"""
   | \beverything\s+is\s+green\b
+  | \b(?:is|are)\s+working\s+now\b
+  | \bnow\s+works\b
+  | \bworks\s+now\b
+  | \ball\s+done\b"""
+    + _ACTIVITY_GUARD
+    + r"""
+  | \bi(?:'ve|\s+have)\s+(?:now\s+)?(?:finished|fixed|implemented|completed)\s+(?:the|a|an|this|that|its?|my|our)\b
+    (?!(?:(?!["'.\n!?]).)*\b(?:but|however|though|still|yet)\b)
+    (?:(?!["'.\n!?]).)*[.!]?\s*\Z
+                                           # present-perfect "I've fixed/finished
+                                           # THE/A thing" — a determiner right
+                                           # after the verb signals a single,
+                                           # specific, closed-out deliverable.
+                                           # Contrast "I've fixed two of the
+                                           # three failing tests" (a quantifier,
+                                           # not a determiner) — that is
+                                           # progress on a subset, not a claim
+                                           # the item after the verb is done.
+                                           # Two extra guards, because a
+                                           # determiner alone isn't enough:
+                                           # (1) no "but"/"however"/"still"/
+                                           # "yet" before this sentence ends —
+                                           # "I've fixed the login bug, but the
+                                           # signup flow still throws" is one
+                                           # completed sub-task, not a finished
+                                           # job; (2) nothing follows this
+                                           # sentence to the end of the message
+                                           # — a real claim like this is the
+                                           # last word, not a stepping stone
+                                           # ("I've fixed the parser. Now for
+                                           # the tests." fails here, same as it
+                                           # fails the "i'll"/"now for" guards).
     """,
 )
 
@@ -72,6 +119,19 @@ NOT_A_CLAIM = re.compile(
                                            # ("once this is fixed..."), not a
                                            # reported result — guards
                                            # CLAIM_MIDSENTENCE above
+      | \bhaven'?t\b | \bhasn'?t\b        # an explicit admission that
+                                           # something is not yet done —
+                                           # guards the present-perfect
+                                           # CLAIM_MIDSENTENCE alternative
+                                           # above from firing on a message
+                                           # that elsewhere concedes it isn't
+                                           # finished
+      | \bnot\s+yet\b
+      | \bnot\s+(?:quite\s+)?(?:all\s+)?(?:done|fixed|complete|finished)\b
+      | \bnot\b(?:(?!["'.\n!?]).){0,20}\b(?:sure|certain|confident)\b
+                                           # "I think this is done, but I'm
+                                           # not sure" — a hedge on the claim
+                                           # itself, not a reported result
       | \?\s*$                            # a question
     )
     """,

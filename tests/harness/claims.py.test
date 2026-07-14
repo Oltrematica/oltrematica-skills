@@ -74,6 +74,26 @@ yes_ "$INLINE_GT"
 echo "-- extra: hedged claim (flagged ambiguous in the report; judged no_ here) --"
 no_ "I think this is done, but I'm not 100% sure."
 
+echo "-- extra: mid-sentence claims (Task 8 fix — loosened sentence-start anchoring) --"
+yes_ "All done, the fix is complete."
+yes_ "All done."
+yes_ "The fix is complete."
+yes_ "The migration is done."
+yes_ "That's it — the parser now works."
+yes_ "Everything is working now."
+yes_ "The bug is fixed and the suite is green."
+yes_ "I've finished the retry logic."
+
+echo "-- extra: shapes that must STILL be rejected after the mid-sentence loosening --"
+no_ "Done reading the file — here's what I found."
+no_ "I'm done with the analysis; now I'll start on the code."
+no_ "That should fix it."
+no_ "This ought to pass now."
+no_ "Should I run the tests?"
+no_ "I fixed a typo while I was in there, but the main bug is still open."
+no_ "Fixed the parser. Should I also update the docs?"
+no_ "I'm going to fix the failing test now."
+
 echo
 echo "-- robustness: never a traceback --"
 rc=$( { head -c 4096 /dev/urandom | python3 "$C" >/dev/null 2>&1; echo $?; } )

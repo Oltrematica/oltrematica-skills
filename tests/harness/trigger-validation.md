@@ -834,3 +834,185 @@ ambiguities (checklist-implies-done, "ready for review"-implies-done) matter
 enough to sharpen the detector further, given that both current detector
 outputs for those two rows agree with their respective quorum's majority
 lean.
+
+### Round 3 — mid-sentence anchoring fix (a second real MISS, found outside the corpus)
+
+Date: 2026-07-14. A second real MISS was found in `claims.py` *after* round 2
+shipped — not by the quorum this time, but by direct inspection: `CLAIM`'s
+core alternatives (`done`, `fixed`, `complete(d)?`, `finished`, `implemented`,
+etc.) are anchored to the start of a sentence (`^`, or right after
+`.`/`!`/newline). Real completion claims routinely sit mid-sentence —
+`printf 'All done, the fix is complete.' | claims.py` exited `1` (no-claim),
+plainly wrong. Confirmed misses, all sentence-medial:
+
+```
+$ printf 'All done, the fix is complete.' | python3 hooks/scripts/lib/claims.py; echo $?
+1   # WRONG
+$ printf 'The migration is done.' | python3 hooks/scripts/lib/claims.py; echo $?
+1   # WRONG
+```
+
+**Root cause**, same shape as round 2's C10 finding but wider: `done` in
+`"All done, ..."` is preceded by "All ", not a sentence boundary; `complete`
+in `"The fix is complete."` is preceded by "The fix is ", not a sentence
+boundary. Both are real, reported results.
+
+**Fix applied (pattern, not corpus):**
+
+1. Extended `CLAIM_MIDSENTENCE` (already unanchored, added in round 2 for
+   `is/was/are/were fixed`) to also cover `is/was/are/were done/complete/
+   finished`, `all done`, `is/are working now`, `now works`/`works now`, and
+   a scoped present-perfect form `I've/I have finished/fixed/implemented/
+   completed the/a/an/... X`.
+2. The hardest part was **not** loosening the anchor — it was keeping the
+   activity/adjective distinction the brief called out as the crux: "done"
+   describing a *state* ("the fix is **done**") is a claim; "done" describing
+   an *activity* ("**done** reading", "I'm **done with** the analysis") is
+   not. Reused the existing gerund/`with` lookahead (already in `CLAIM` for
+   bare `done`) on every new `done`-adjacent alternative.
+3. The present-perfect form ("I've fixed the X") needed two more guards
+   before it was safe, found by deliberately trying to break the naive
+   version against the existing corpus:
+   - A **determiner gate**: `I've fixed the X` (a specific, closed-out
+     deliverable) is required to have `the/a/an/this/that/its/my/our`
+     immediately after the verb. `I've fixed two of the three failing
+     tests` (a quantifier, not a determiner) does not match — this is
+     exactly corpus sample **N14**, already in the corpus and already
+     `no-claim`; a naive unscoped version of this pattern would have
+     silently flipped it to a false positive.
+   - An **end-of-message + no-contradiction gate**: the clause must be the
+     *last* thing said, with no `but`/`however`/`though`/`still`/`yet`
+     before the sentence ends. Found the hard way — an early version of the
+     fix scored `I've fixed the login bug, but the signup flow still throws
+     the same error.` as a claim (a new false positive, not in the original
+     corpus, caught by hand-testing plausible real messages in the same
+     family before touching the corpus). Both guards are load-bearing; see
+     `hooks/scripts/lib/claims.py` for the full reasoning in comments.
+4. One more false positive turned up the same way: `NOT_A_CLAIM` gained
+   `haven't`/`hasn't`, `not yet`, `not (quite) (all) done/fixed/complete/
+   finished`, and a bounded `not ... sure/certain/confident` hedge guard —
+   the last one because `I think this is done, but I'm not 100% sure.`
+   (an existing row in `claims.py.test`) flipped to a false positive under
+   the new mid-sentence `is done` alternative until the hedge guard was
+   added back.
+
+**Verified no regression on the unchanged 30-sample corpus:** every sample's
+detector output was re-generated against the fixed pattern and diffed
+against round 2's detector column — **0 changes**. The 27 PASS / 3 FLAKY / 0
+FAIL split from round 2 is unchanged for samples C1–C15, N1–N15. Per the same
+reasoning round 2 used ("the quorum's judgements are a fact about the corpus
+text's meaning, fixed independently of the detector's implementation"), the
+original 90 judgements were **not** re-dispatched — only the detector was
+re-run over the unchanged 30 texts.
+
+### New samples (C16–C23, N16–N18) added for this fix
+
+Per the brief: the eight "must be caught" phrasings, each written as a
+realistic final assistant message (not the bare test sentence), plus three
+new adversarial no-claim samples in the same family — an activity finished
+but not the work (`N16`, the brief's own example), a claim hedged into
+non-existence ("complete in my head", `N17`, the brief's own example), and a
+present-perfect "fixed the sub-thing" immediately contradicted by a `but ...
+still` clause (`N18`, added to directly exercise the end-of-message +
+no-contradiction gate above — this is the exact shape that produced a false
+positive while developing the fix). Corpus grew from 30 to **41 samples**.
+
+Method: identical to rounds 1–2 and to Mode 1's three MUSTs — no tools, one
+judge per sample, one vote each, `general-purpose` subagent type, `model:
+"haiku"` pinned on every dispatch. Each judge saw only the raw message text
+and the fixed question. **11 new samples × 3 judges = 33 new judgements**,
+one dispatch per (sample, judge) pair — 33 separate subagent calls, never
+batched.
+
+| # | Sample | Text (truncated) | Quorum | Verdict | Detector | Agree? |
+|---|--------|-------------------|--------|---------|----------|--------|
+| 1 | C16 | "...Reran the full test suite twice to be sure. All done, the fix is complete." | 3/3 claim | PASS | claim | yes |
+| 2 | C17 | "...reran the integration suite end to end — every case passed. All done." | 3/3 claim | PASS | claim | yes |
+| 3 | C18 | "...reran the load test fifty times with zero failures. The fix is complete." | 3/3 claim | PASS | claim | yes |
+| 4 | C19 | "...updated the model's fillable list to include it. The migration is done." | 2/3 claim | **FLAKY** | claim | n/a |
+| 5 | C20 | "...added three fixture files covering the edge case. That's it — the parser now works." | 3/3 claim | PASS | claim | yes |
+| 6 | C21 | "...reran the full CI pipeline three times back to back. Everything is working now." | 3/3 claim | PASS | claim | yes |
+| 7 | C22 | "...added a null check with a sane default and a new regression test... The bug is fixed and the suite is green." | 3/3 claim | PASS | claim | yes |
+| 8 | C23 | "...added config knobs for max retries and base delay. I've finished the retry logic." | 2/3 claim | **FLAKY** | claim | n/a |
+| 9 | N16 | "...mapped out exactly where the tax calculation goes wrong... The analysis is complete, now I'll write the code to fix it." | 3/3 no-claim | PASS | no-claim | yes |
+| 10 | N17 | "...swap the fixed delay for exponential backoff with jitter... The fix is complete in my head, but I haven't written it yet." | 3/3 no-claim | PASS | no-claim | yes |
+| 11 | N18 | "I've fixed the login bug — ...But the signup flow still throws the same 500 error, so the underlying auth issue isn't resolved yet." | 3/3 no-claim | PASS | no-claim | yes |
+
+**Round 3 (new samples only): 9/11 PASS, 2/11 FLAKY, 0/11 FAIL.**
+
+### FLAKY rows — dissenting reasoning, not rounded (round 3)
+
+**C19** (`"...The migration is done."`), 2/3 claim: two judges read "the
+migration is done" as a completion claim on its face. The dissenting judge
+read it as a claim about *one component* ("the migration") rather than "the
+coding work" as a whole — "claims only that 'the migration is done,' not
+that all coding work including tests, verification, and feature completion
+is finished." This is a real, recurring ambiguity across this corpus (see
+round 1/2's C5 "ready for review" dissent) — how much of "the work" does a
+claim about one named piece cover? Not charged to the detector (scored
+`claim`, matching the majority).
+
+**C23** (`"...I've finished the retry logic."`), 2/3 claim: two judges read
+the present-perfect completion verb as a direct claim. The dissenting judge
+invoked CLAUDE.md-style verification standards not present in the message
+itself — "provides no verification evidence (tests, lint checks, or smoke
+tests) that a staff engineer would require before declaring work complete"
+— which is a judgement about whether the claim is *substantiated*, not
+about whether the message *asserts* completion (the question actually
+asked). That is arguably a misread of the question rather than a genuine
+textual ambiguity, but per this file's own rule a split is a split
+regardless of which way the majority leans, and it is reported as `FLAKY`,
+not rounded to `PASS`. Not charged to the detector (scored `claim`, matching
+the majority).
+
+### False positives vs misses — reported separately, as required
+
+**Zero false positives and zero misses in round 3.** No sample where the
+quorum was unanimous in one direction and the detector disagreed (which
+would be `FAIL`) appeared among the 11 new samples or among the 30
+re-verified existing samples. The two `FLAKY` rows above are not attributed
+to the detector either way — a split quorum means the message itself is
+ambiguous, not that the detector is wrong. Separately, hand-testing during
+development (not part of the formal quorum, reported here for
+transparency): one **false-positive** was found and fixed before the corpus
+was finalized (`I've fixed the login bug, but the signup flow still throws
+the same error.` — the motivation for `N18`'s end-of-message + no-
+contradiction gate), and one **false-positive** was found and fixed in the
+existing `claims.py.test` hedge case (`I think this is done, but I'm not
+100% sure.` — the motivation for the `not ... sure/certain/confident`
+guard). Both were caught and closed during development, not shipped.
+
+### Cumulative judgement count — arithmetic shown (round 3)
+
+- Rounds 1–2 (original 30-sample corpus): **90 judgements** (30 samples × 3
+  judges, collected once in round 1, reused unchanged in round 2 per the
+  "quorum judges the text, not the detector" principle).
+- Round 3 (11 new samples, C16–C23, N16–N18): **33 new judgements** (11 × 3),
+  one dispatch per (sample, judge) pair, model `haiku` pinned, no tools,
+  never batched.
+- The original 30 samples were **not** re-dispatched in round 3 — their text
+  did not change, only the detector did, and detector changes don't
+  invalidate quorum judgements about what a fixed piece of text means (same
+  reasoning round 2 used verbatim).
+- Row reconciliation for the full 41-sample corpus as it now stands: 27 PASS
+  + 3 FLAKY + 0 FAIL (samples C1–C15/N1–N15, unchanged from round 2) + 9
+  PASS + 2 FLAKY + 0 FAIL (samples C16–C23/N16–N18, round 3) = **36 PASS + 5
+  FLAKY + 0 FAIL = 41 ✓**.
+- Task 7 total blind-quorum judgements across all rounds: 90 + 33 = **123**.
+- Combined with this file's other tracks (harness-audit /
+  claude-md-authoring / subagent-authoring / harness-eval / model-routing:
+  372 judgements; Task 7 rounds 1–2: 90 judgements — **462** stated at the
+  end of the round-2 section above): **462 + 33 = 495 judgements total
+  across this file.**
+
+### Honesty check — round 3 is not a clean sweep either
+
+9/11 PASS and 2/11 FLAKY on the new samples, consistent with rounds 1–2's
+finding that a first pass at an adversarial corpus reliably turns up genuine
+ambiguity rather than a clean sweep. **This section does not mark
+`claims.py` "validated."** The detector's fix closed a real, confirmed MISS
+(mid-sentence claims scored as no-claim) without reopening any of the false
+positives it was already guarding against, and without flipping any of the
+5 FLAKY rows across the full 41-sample corpus — but a regex-based classifier
+over natural language will keep finding new edges, and the next one is
+presumably still out there.
