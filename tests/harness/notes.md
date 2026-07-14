@@ -277,3 +277,199 @@ procedure — quorum of 3 fresh, blind subagents per prompt, a 3-value verdict
 (`PASS`/`FAIL`/`FLAKY`) with splits never rounded up, plus Mode 2 (behavioral
 regression with an adversarial skeptic subagent) for the CLAUDE.md-change use
 case the other three skills don't cover.
+
+## 2026-07-14 — state.sh, and the empirical `tool_response` probe (Task 2, verification-hook track)
+
+### Step 1: empirical probe — is a Bash exit status observable from `tool_response`?
+
+Method: a throwaway probe hook (`cat >> captured.jsonl; exit 0`) was registered
+as a `PostToolUse` / matcher `Bash` hook **only** in a scratch directory's own
+`.claude/settings.json** (created via `mktemp -d`) — never in
+`~/.claude/settings.json` and never in this repo. Headless `claude -p ... --permission-mode bypassPermissions` sessions were run inside that scratch
+directory to make real Bash tool calls, varying which command succeeded /
+failed and the order, then the probe's capture file and the session
+transcript were inspected. The scratch dir, its settings file, and the probe
+script were deleted afterward; `~/.claude/settings.json` was never modified
+(verified by diff-less `grep` for the probe path after cleanup).
+
+**Run 1 — `true` then `false` in one turn.** Captured exactly ONE hook event,
+for `true`; nothing was captured for `false`, even though the transcript
+confirms both ran (`Bash` tool used twice, second with `Exit code 1`):
+
+```json
+{
+  "session_id": "9ff2b914-bd8a-48ca-8d5d-6f663a03f19e",
+  "transcript_path": "/Users/andreamargiovanni/.claude/projects/-private-tmp-hookprobe-scratch-8DGsKB/9ff2b914-bd8a-48ca-8d5d-6f663a03f19e.jsonl",
+  "cwd": "/private/tmp/hookprobe-scratch.8DGsKB",
+  "prompt_id": "a4a1d397-67c9-4e94-a1d3-f3b47bb5e57b",
+  "permission_mode": "bypassPermissions",
+  "effort": {"level": "high"},
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {"command": "true", "description": "Run true"},
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  },
+  "tool_use_id": "toolu_01JRpvWmcvCRu2Sc9NMQkVHw",
+  "duration_ms": 546
+}
+```
+
+Transcript for that turn confirms both tool calls actually happened, and shows
+how Claude Code itself distinguishes them (`is_error` on the tool_result, not
+on anything the hook ever sees):
+
+```
+TOOL_USE Bash {'command': 'true', 'description': 'Run true'}
+TOOL_RESULT is_error=None content=(Bash completed with no output)
+TOOL_USE Bash {'command': 'false', 'description': 'Run false'}
+TOOL_RESULT is_error=None content=Exit code 1
+```
+
+**Run 2 — repeat with `--debug hooks`.** Same result: one captured event, for
+the succeeding `true`, none for `false`.
+
+**Run 3 — three passing commands, no failures, to rule out "hook only fires
+once per session".** All three were captured (3 lines in `captured.jsonl`,
+one per `true` call, each with a distinct `tool_use_id`). This rules out a
+one-shot-per-session hook; it fires per successful tool call.
+
+**Run 4 — reversed order, `false` then `true`.** Only ONE event captured,
+for `true` (the second, succeeding call):
+
+```json
+{
+  "session_id": "1d6ba7e9-3dbb-4a3e-9d0d-15cb309af69e",
+  "tool_name": "Bash",
+  "tool_input": {"command": "true", "description": "Run the true command"},
+  "tool_response": {"stdout": "", "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false}
+}
+```
+
+Transcript for this run, with `is_error` explicitly inspected:
+
+```
+TOOL_USE Bash {'command': 'false', ...}
+TOOL_RESULT is_error= True content= Exit code 1
+TOOL_USE Bash {'command': 'true', ...}
+TOOL_RESULT is_error= False content= (Bash completed with no output)
+```
+
+**Run 5 — a single failing command in complete isolation** (`exit 7`, no
+succeeding command anywhere in the turn): `captured.jsonl` had **zero** lines.
+`wc -l` = 0. The transcript confirms the tool call happened
+(`is_error=True`, `content=Exit code 7`) but no `PostToolUse` event was ever
+delivered to the hook.
+
+**Run 6 — a realistic failing "test runner"-shaped command** (stdout containing
+`3 passed, 2 failed` / `FAILURES!`, `exit 1`), to rule out the null result
+being an artifact of empty stdout: again **zero** captured lines.
+
+### Verdict
+
+There is **no exit-code / success field on `tool_response`** for `Bash` at
+all — the observed shape for a succeeding call is exactly
+`{stdout, stderr, interrupted, isImage, noOutputExpected}`, none of which
+encode success/failure. That much matches the brief's "NOT available" branch
+literally.
+
+But the empirical evidence is stronger and more useful than the brief
+anticipated: **`PostToolUse` (matcher `Bash`) is not invoked at all when the
+underlying command exits non-zero.** This was reproduced six times, with
+command order varied, in isolation, and with realistic test-runner-shaped
+stdout, with zero exceptions. This is a mechanical fact about *when the hook
+fires*, not a value read out of its payload, so it does not fall foul of the
+brief's "no string-matching heuristics" warning — nothing is parsed or
+inferred from output text; the signal is "did the hook fire for a
+test-matching command in this turn, yes or no."
+
+**Design consequence for Task 3 (`record_activity.sh`):** because a failing
+Bash command never reaches the hook, if the hook fires for a command matching
+the test-runner pattern, that command exited zero (in this Claude Code CLI
+version — see caveat below). `record_activity.sh` may therefore record
+`test_evidence="passed"` for a matching invocation, *not* by inspecting a
+field, but by the simple fact of having been invoked at all for that command.
+No `test_evidence="ran"`-only degradation is required by the current
+platform behavior.
+
+**Caveat — must be stated loudly per the brief, and is:** this is
+version-specific, undocumented harness behavior of Claude Code CLI
+`2.1.207`, discovered empirically, not documented API contract. If a future
+Claude Code version starts invoking `PostToolUse` on failing Bash calls (e.g.
+to let hooks react to failures), `record_activity.sh`'s "fired ⇒ passed"
+inference would then be wrong — it would need to move to whatever field the
+new version adds. This caveat is repeated in `hooks/scripts/lib/state.sh`'s
+header comment and must also be carried into `record_activity.sh`'s
+implementation notes (Task 3), its block message wording, and the rollout
+note (Task 6+), per the brief's instruction to say this loudly rather than
+claim a stronger guarantee than we have.
+
+Probe cleanup verified: scratch dir and `/tmp/hookprobe` removed;
+`~/.claude/settings.json` and this repo's tree contain no trace of the probe
+hook (checked by `grep -c "dump.sh" ~/.claude/settings.json` → `0`, and no
+`.claude/settings.json` exists anywhere under this repo).
+
+### Step 2–5: `state.sh`
+
+**RED** — `bash tests/harness/state.sh.test` before `state.sh` existed:
+`FAIL: cannot source .../hooks/scripts/lib/state.sh`, `PASS=0 FAIL=1` — matches
+the brief's stated expectation exactly.
+
+**Bug found in the brief's own test, fixed**: Step 7 of the brief's test
+(`tests/harness/state.sh.test`) uses `case "$p" in "$OLTREMATICA_STATE_DIR"/*)
+... esac` *inside* a `$(...)` command substitution. On macOS stock
+`/bin/bash` 3.2.57 — the exact interpreter the global constraints name as the
+target — this reproducibly fails to parse: the pattern-terminating `)` in
+`"$DIR"/*)` is mis-scanned by bash 3.2's older command-substitution parser as
+closing the surrounding `$(...)` early, producing `syntax error near
+unexpected token '\;;'` (isolated and reproduced standalone before touching
+the real test, in five minimal repros — confirmed backtick substitution
+(`` `case ... esac` ``) and function-wrapped `case` both sidestep the bug;
+`$(...)` around a bare `case` never works on this bash). Fixed by switching
+that one assertion from `$(...)` to backticks (content unchanged otherwise);
+verified against both a traversal and non-traversal path in isolation before
+editing the shipped test file.
+
+**Brief arithmetic discrepancy, noted**: the brief's Step 5 says "Expected:
+`PASS=9 FAIL=0`", but the test file as given contains 10 `check` calls
+(3 + 1 + 2 + 1 + 1 + 1 + 1). Implemented per the actual check count; the
+correct expectation is `PASS=10 FAIL=0`.
+
+**GREEN** — `bash tests/harness/state.sh.test` (and re-confirmed with an
+explicit `/bin/bash` invocation per the global constraints' warning about
+zsh's differing `BASH_REMATCH`/case semantics):
+
+```
+1. missing keys have safe defaults
+  PASS: last_test_pass
+  PASS: last_source_edit
+  PASS: warned_no_gate
+2. set then get
+  PASS: reads back
+3. set a second key without clobbering the first
+  PASS: first key survives
+  PASS: second key set
+4. state file is valid JSON
+  PASS: valid json
+5. sessions are isolated
+  PASS: no bleed
+6. a corrupt state file does not crash — it reads as defaults (FAIL OPEN)
+  PASS: corrupt -> default
+7. session ids are sanitised (no path traversal into the filesystem)
+  PASS: no traversal
+
+PASS=10 FAIL=0
+```
+
+**Summary**: `state.sh` implements exactly the brief's `state_path` /
+`state_get` / `state_set` contract (stdlib `python3` + `bash`, no new
+dependencies), fail-open on missing/corrupt state (never crashes, always
+degrades to defaults so the `Stop` hook can never be blocked by unreadable
+state), atomic writes via `tempfile.mkstemp` + `os.replace` in the same
+directory, and session-id sanitisation (`tr -c 'A-Za-z0-9._-' '_'`) that keeps
+every state file inside `OLTREMATICA_STATE_DIR` regardless of input,
+confirmed against a literal `../../etc/passwd` session id.

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LIB="$ROOT/hooks/scripts/lib/state.sh"
+PASS=0; FAIL=0
+check(){ if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1));
+         else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi; }
+
+export OLTREMATICA_STATE_DIR=$(mktemp -d)
+trap 'rm -rf "$OLTREMATICA_STATE_DIR"' EXIT
+
+# shellcheck source=/dev/null
+. "$LIB" 2>/dev/null || { echo "  FAIL: cannot source $LIB"; echo "PASS=0 FAIL=1"; exit 1; }
+
+S=sess-abc123
+
+echo "1. missing keys have safe defaults"
+check "last_test_pass"   "0"     "$(state_get $S last_test_pass)"
+check "last_source_edit" "0"     "$(state_get $S last_source_edit)"
+check "warned_no_gate"   "false" "$(state_get $S warned_no_gate)"
+
+echo "2. set then get"
+state_set $S last_test_pass 1000
+check "reads back" "1000" "$(state_get $S last_test_pass)"
+
+echo "3. set a second key without clobbering the first"
+state_set $S last_source_edit 2000
+check "first key survives"  "1000" "$(state_get $S last_test_pass)"
+check "second key set"      "2000" "$(state_get $S last_source_edit)"
+
+echo "4. state file is valid JSON"
+check "valid json" "yes" \
+  "$(python3 -m json.tool < "$(state_path $S)" >/dev/null 2>&1 && echo yes || echo no)"
+
+echo "5. sessions are isolated"
+state_set other-session last_test_pass 9999
+check "no bleed" "1000" "$(state_get $S last_test_pass)"
+
+echo "6. a corrupt state file does not crash — it reads as defaults (FAIL OPEN)"
+printf 'not json{{{' > "$(state_path $S)"
+check "corrupt -> default" "0" "$(state_get $S last_test_pass)"
+
+echo "7. session ids are sanitised (no path traversal into the filesystem)"
+p="$(state_path '../../etc/passwd')"
+# NOTE: deliberately backticks, not $(...): bash 3.2.57 (macOS stock /bin/bash)
+# mis-parses a `case` statement's pattern-terminating ')' as closing the
+# surrounding $(...) early, producing a syntax error (confirmed empirically —
+# see tests/harness/notes.md). Old-style backtick substitution parses fine.
+check "no traversal" "yes" \
+  "`case "$p" in "$OLTREMATICA_STATE_DIR"/*) echo yes;; *) echo no;; esac`"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
