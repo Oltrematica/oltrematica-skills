@@ -106,7 +106,9 @@
 
   /* ---------- hero ---------- */
   .hero { padding:clamp(70px,11vh,120px) 0 74px; border-top:0; }
-  .hero .col { max-width:20ch; }
+  /* `ch` resolves against the element's own font-size — so the measure must be
+     set on the display type itself, not on a body-sized wrapper. */
+  .hero h1 { max-width:15ch; }
   .hero h1 em {
     font-style:normal; color:var(--signal);
     /* the one place the accent is spent large */
