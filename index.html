@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>oltrematica-skills — your agent can't tell you when it's wrong</title>
-<meta name="description" content="A Claude Code plugin: seven skills, eight audit surfaces, and a hook that stops an agent from claiming the work is done when the tests are stale. MIT." />
+<meta name="description" content="A Claude Code plugin: harness assurance, EU compliance evidence, and the cost discipline that stops you hitting the usage limit — seven skills and a hook that won't let an agent claim the work is done when the tests are stale. MIT." />
 <style>
   :root{
     --ink:#0B0F14; --ink-2:#111721; --ink-3:#19202B;
@@ -55,6 +55,10 @@
           color:var(--muted);padding:22px 0 46px}
   .topbar b{color:var(--text);font-weight:600;letter-spacing:.14em}
   .topbar .lic{border:1px solid var(--line-2);border-radius:999px;padding:4px 10px;letter-spacing:.08em}
+  .topbar .nav{display:flex;gap:16px}
+  .topbar .nav a{text-decoration:none;color:var(--muted)}
+  .topbar .nav a:hover{color:var(--signal)}
+  @media(max-width:720px){.topbar .nav{display:none}}
 
   .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center}
   @media(max-width:940px){.hero-grid{grid-template-columns:1fr;gap:38px}}
@@ -116,6 +120,9 @@
   .card{background:var(--surface);padding:24px 22px;display:flex;flex-direction:column;gap:9px}
   .card .t{font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--signal)}
   .card p{font-size:.93rem;color:var(--muted);line-height:1.6}
+  .card a.more{margin-top:auto;padding-top:6px;font-family:var(--mono);font-size:.68rem;
+       letter-spacing:.1em;text-transform:uppercase;color:var(--signal);text-decoration:none}
+  .card a.more:hover{text-decoration:underline;text-decoration-color:var(--signal)}
 
   /* ---------- stacks ---------- */
   .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -139,7 +146,12 @@
 <div class="wrap">
   <div class="topbar">
     <div><b>oltrematica-skills</b></div>
-    <div style="display:flex;gap:14px;align-items:center">
+    <div style="display:flex;gap:18px;align-items:center">
+      <nav class="nav" aria-label="Sections">
+        <a href="#cost">Cost</a>
+        <a href="#assurance">Assurance</a>
+        <a href="#compliance">Compliance</a>
+      </nav>
       <span class="lic">MIT</span>
       <a href="https://github.com/Oltrematica/oltrematica-skills">GitHub</a>
     </div>
@@ -250,11 +262,11 @@ without running it.</span>
     </div>
   </section>
 
-  <!-- ============ THE TWO THESES ============ -->
+  <!-- ============ THE THREE THESES ============ -->
   <section>
     <div class="stack">
       <div class="eyebrow">Why</div>
-      <h2>Neither failure announces itself.</h2>
+      <h2>Three failures. None of them announces itself.</h2>
     </div>
     <div class="grid" style="margin-top:30px">
       <div class="card">
@@ -265,6 +277,17 @@ without running it.</span>
           A skill's description drifts until it fires on everything, or on nothing. There is no error
           message and no alert. The agent just gets worse — and the team concludes the model got worse.
         </p>
+        <a class="more" href="#assurance">Harness assurance →</a>
+      </div>
+      <div class="card">
+        <div class="t">Cost fails through accumulation</div>
+        <h3>You paid for that file dump 27&nbsp;times.</h3>
+        <p>
+          Usage is context length × turns — every turn re-sends the entire conversation. The forty
+          files pasted at turn 3 are billed again at turn 30, and on every turn in between. The team
+          concludes the model got expensive; the session just never got cleaned.
+        </p>
+        <a class="more" href="#cost">Where the usage goes →</a>
       </div>
       <div class="card">
         <div class="t">Compliance fails through friction</div>
@@ -274,6 +297,204 @@ without running it.</span>
           suddenly a deadline. EU Cyber Resilience Act vulnerability-reporting obligations begin
           <b>11 September 2026</b> for anyone shipping software into the EU.
         </p>
+        <a class="more" href="#compliance">EU compliance evidence →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COST / MODEL ROUTING ============ -->
+  <section id="cost">
+    <div class="stack">
+      <div class="eyebrow">Model routing · why you hit the limit</div>
+      <h2>You don't pay per prompt. You pay for the whole conversation, every&nbsp;turn.</h2>
+      <p class="lede muted">
+        Every turn re-sends the entire context back to the model — that is how a stateless API
+        carries a conversation at all. A long context isn't paid once; it is paid again on every
+        turn that follows. The <span class="k">model-routing</span> skill teaches that mechanism,
+        then works the levers in order of what they actually save — and "switch to a cheaper model"
+        is <em>third</em>, not first.
+      </p>
+    </div>
+
+    <div class="grid" style="margin-top:30px">
+      <div class="card">
+        <div class="t">Lever 01 · delegate</div>
+        <h3>Read-heavy work goes to a subagent.</h3>
+        <p>
+          A survey of forty files costs the main conversation almost nothing if a subagent reads
+          them and returns only the conclusion — the files live in <em>its</em> context, disposable
+          after the answer. Done inline, they sit in yours and are re-paid on every turn for the
+          rest of the session.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">Lever 02 · route</div>
+        <h3>Cheaper models — where there's no judgement to buy.</h3>
+        <p>
+          Most tasks are not architecture. A mechanical, fully-specified edit doesn't need the most
+          capable model available, and a subagent's <span class="k">model:</span> field pins the
+          cheap tier deliberately instead of by accident. The routing table below is the whole
+          decision.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">Lever 03 · hygiene</div>
+        <h3>The context you never cleaned.</h3>
+        <p>
+          Pasted command output, whole files read where a <span class="k">grep</span> would have
+          answered, one session dragged across unrelated tasks. <span class="k">/context</span>
+          shows what is silently costing you on every turn; <span class="k">/compact</span> and a
+          fresh session are the fix.
+        </p>
+      </div>
+    </div>
+
+    <div class="tw" style="margin-top:26px">
+      <table>
+        <thead><tr><th>Task shape</th><th>Tier</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Mechanical, fully specified — a rename, boilerplate, transcribing a spec</td>
+              <td><span class="k">haiku</span></td>
+              <td>There is no judgement to make. Paying for reasoning you don't use is pure waste.</td></tr>
+          <tr><td>Integration, multi-file work, debugging, pattern-matching</td>
+              <td><span class="k">sonnet</span></td>
+              <td>Needs judgement, but not deep design.</td></tr>
+          <tr><td>Architecture, design, hard review, subtle correctness</td>
+              <td><span class="k">opus</span> · <span class="k">fable</span></td>
+              <td>A wrong architectural call costs more than every token saved by going cheap.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note" style="margin-top:26px">
+      <b>The counter-rule: turn count beats token price.</b> A cheap model that takes three times
+      the turns re-sends the whole context on every extra turn — and ends up costing more than the
+      capable model that got it right first time. "Always use Haiku" is the wrong lesson; <em>least
+      total cost to a correct result</em> is the goal. And <span class="k">/fast</span> is a latency
+      lever, not a cost lever — same model, <b>higher</b> per-token price.
+    </p>
+  </section>
+
+  <!-- ============ HARNESS ASSURANCE ============ -->
+  <section id="assurance">
+    <div class="stack">
+      <div class="eyebrow">Harness assurance</div>
+      <h2>Scaffolding you can audit. Triggers you can prove.</h2>
+      <p class="lede muted">
+        A skill that never fires is dead code that looks alive. A skill that fires on everything is
+        noise with a good reputation. Both are invisible until someone measures them —
+        <span class="k">harness-audit</span> shows you what's there,
+        <span class="k">harness-eval</span> proves whether it works.
+      </p>
+    </div>
+
+    <div class="grid" style="margin-top:30px;grid-template-columns:repeat(auto-fit,minmax(380px,1fr))">
+      <div class="card">
+        <div class="t">harness-audit</div>
+        <h3>First, see what's there.</h3>
+        <p>
+          Inventories the eight surfaces a repo hands an agent — <span class="k">CLAUDE.md</span>,
+          skills, subagents, commands, hooks and the rest — and reports what's missing, what has
+          drifted, and what's competing for attention. Start here.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">harness-eval · the quorum</div>
+        <h3>Three blind judges per prompt.</h3>
+        <p>
+          Every trigger prompt is judged by three independent subagents: <b>no tools</b>, one prompt
+          each, one pinned model. They see only the <span class="k">description:</span> — because
+          that is all the real router sees at trigger time. A judge that can read the skill body is
+          not a judge; it's a cheat.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">harness-eval · the verdict</div>
+        <h3>FLAKY is a finding, not a rounding error.</h3>
+        <p>
+          A 2/3 split never rounds up to PASS. A clause the judges can't read consistently is a
+          clause the router won't apply consistently — the disagreement <em>is</em> the result, and
+          the judges' reasoning names the exact phrase to sharpen.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">harness-eval · regression</div>
+        <h3>A built-in skeptic marks your homework.</h3>
+        <p>
+          Pin an observable behavior, change one thing in the harness, re-run — then dispatch a
+          skeptic whose only job is to argue the change did nothing. If it can, you haven't shown
+          anything yet. A change that moves nothing is a finding too: that paragraph is dead weight.
+        </p>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:26px">
+      This is the same discipline this repo runs on itself — the <b>372 blind judgements</b> in the
+      evidence section below are <span class="k">harness-eval</span> applied to its own catalogue.
+      What we ship is what we use.
+    </p>
+  </section>
+
+  <!-- ============ EU COMPLIANCE EVIDENCE ============ -->
+  <section id="compliance">
+    <div class="stack">
+      <div class="eyebrow">EU compliance evidence</div>
+      <h2>11 September 2026 is not moving.</h2>
+      <p class="lede muted">
+        That is when EU Cyber Resilience Act vulnerability-reporting obligations begin for anyone
+        shipping software into the EU. Compliance fails through friction, not ignorance — so the
+        compliance track does the assembly work continuously and hands humans a review-ready draft,
+        not a deadline panic.
+      </p>
+    </div>
+
+    <div class="hero-grid" style="margin-top:30px;align-items:start">
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-t">compliance/ — the dossier, in the repo</span>
+        </div>
+        <div class="term-b">
+<span class="w">compliance/</span>
+├── <span class="hi">COMPLIANCE.md</span>            <span class="u">the dossier, review log included</span>
+├── <span class="hi">sbom/v2.3.cdx.json</span>       <span class="u">one CycloneDX SBOM per release ref</span>
+├── <span class="hi">vulns/CVE-2026-….md</span>      <span class="u">one triage record per finding</span>
+└── <span class="hi">a11y/axe-home.json</span>       <span class="u">EAA/WCAG scan output</span>
+
+<span class="u">status:</span> <span class="ok">Draft</span> <span class="u">— awaiting human review</span>
+        </div>
+      </div>
+
+      <div class="stack" style="gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r)">
+        <div class="card">
+          <div class="t">cra-evidence</div>
+          <h3>One skill, one dossier.</h3>
+          <p>
+            SBOM generation, supply-chain diff between releases, vulnerability scans with triage
+            drafts, a CRA Annex I gap report, EAA/WCAG accessibility scans — assembled into a
+            <span class="k">compliance/</span> directory that is ready for review, not
+            reconstruction.
+          </p>
+        </div>
+        <div class="card">
+          <div class="t">The contract</div>
+          <h3>Claude drafts. Humans approve.</h3>
+          <p>
+            Every artifact ships as <span class="k">Draft</span> or <span class="k">Proposed</span> —
+            the skill never marks anything Accepted or Compliant on its own initiative. CRA class and
+            EAA scope are legal determinations: asked once, recorded, never assumed. Legal
+            interpretation is deferred to counsel, explicitly.
+          </p>
+        </div>
+        <div class="card">
+          <div class="t">adr-management</div>
+          <h3>Why is the system like this?</h3>
+          <p>
+            Drafts the architecture decision record at the moment the decision is made, instead of
+            never. And when a vulnerability triage <em>accepts</em> a risk, that decision becomes an
+            ADR too — the two skills hand off to each other.
+          </p>
+        </div>
       </div>
     </div>
   </section>
