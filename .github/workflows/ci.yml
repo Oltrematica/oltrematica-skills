@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Test suites (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show bash version
+        # macOS ships stock bash 3.2; Linux runners ship a modern bash.
+        # Both must pass — that's the point of running this matrix.
+        run: /bin/bash --version
+
+      - name: Run every test suite
+        run: |
+          set -euo pipefail
+          suites=(
+            tests/harness/verify_gate.sh.test
+            tests/harness/state.sh.test
+            tests/harness/record_activity.sh.test
+            tests/harness/source_mutation.py.test
+            tests/harness/claims.py.test
+            tests/harness/verify_before_done.sh.test
+            tests/harness/inventory.sh.test
+            tests/harness/eval_run.py.test
+            tests/install.sh.test
+          )
+
+          failed=0
+          for suite in "${suites[@]}"; do
+            echo "::group::${suite}"
+            if /bin/bash "${suite}"; then
+              echo "PASS: ${suite}"
+            else
+              echo "FAIL: ${suite}"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ "${failed}" -ne 0 ]; then
+            echo "One or more test suites failed. See the groups above."
+            exit 1
+          fi
+
+          echo "All suites passed."

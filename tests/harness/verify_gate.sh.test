@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# Contract test for lib/verify_gate.sh
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LIB="$ROOT/skills/harness/harness-audit/scripts/lib/verify_gate.sh"
+PASS=0; FAIL=0
+check(){ if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1));
+         else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi; }
+
+# shellcheck source=/dev/null
+. "$LIB" 2>/dev/null || { echo "  FAIL: cannot source $LIB"; echo "PASS=0 FAIL=1"; exit 1; }
+
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+
+field(){ detect_verify_gate "$1" | grep "^$2=" | cut -d= -f2-; }
+
+echo "1. composer.json with scripts.test"
+mkdir -p "$T/php"
+printf '{"scripts":{"test":"pest"}}' > "$T/php/composer.json"
+check "detected"  "true"                        "$(field "$T/php" detected)"
+check "source"    "composer.json scripts.test"  "$(field "$T/php" source)"
+check "command"   "composer test"               "$(field "$T/php" command)"
+
+echo "2. package.json with scripts.test"
+mkdir -p "$T/node"
+printf '{"scripts":{"test":"vitest run"}}' > "$T/node/package.json"
+check "detected" "true"           "$(field "$T/node" detected)"
+check "command"  "npm test"       "$(field "$T/node" command)"
+
+echo "3. Makefile test target"
+mkdir -p "$T/mk"; printf 'test:\n\techo hi\n' > "$T/mk/Makefile"
+check "detected" "true"        "$(field "$T/mk" detected)"
+check "command"  "make test"   "$(field "$T/mk" command)"
+
+echo "4. no gate at all"
+mkdir -p "$T/none"
+check "detected" "false" "$(field "$T/none" detected)"
+check "command"  ""      "$(field "$T/none" command)"
+
+echo "5. is_test_command recognises the declared command"
+is_test_command "$T/php" "composer test"; check "declared cmd" "0" "$?"
+
+echo "6. is_test_command recognises common equivalents in a PHP repo"
+is_test_command "$T/php" "php artisan test";             check "artisan test" "0" "$?"
+is_test_command "$T/php" "./vendor/bin/pest --filter=x"; check "pest"         "0" "$?"
+is_test_command "$T/php" "vendor/bin/phpunit";           check "phpunit"      "0" "$?"
+
+echo "7. is_test_command recognises node equivalents"
+is_test_command "$T/node" "npm test";       check "npm test" "0" "$?"
+is_test_command "$T/node" "npx vitest run"; check "vitest"   "0" "$?"
+
+echo "8. is_test_command REJECTS non-test commands (false positives are the danger)"
+is_test_command "$T/php" "git status";              check "git status"  "1" "$?"
+is_test_command "$T/php" "ls tests/";               check "ls tests/"   "1" "$?"
+is_test_command "$T/php" "cat tests/FooTest.php";   check "cat a test"  "1" "$?"
+is_test_command "$T/php" "echo 'run the tests'";    check "echo"        "1" "$?"
+
+echo "9. is_test_command REJECTS additional reader commands (ripgrep, wc, sed)"
+is_test_command "$T/php" "rg -l test tests/";       check "rg"          "1" "$?"
+is_test_command "$T/php" "wc -l tests/FooTest.php"; check "wc"          "1" "$?"
+is_test_command "$T/php" "sed -n '1,20p' tests/FooTest.php"; check "sed" "1" "$?"
+
+echo "10. is_test_command ACCEPTS real invocations (position-anchored match)"
+is_test_command "$T/php"  "composer test";                        check "composer test"                "0" "$?"
+is_test_command "$T/php"  "cd app && composer test";               check "cd app && composer test"      "0" "$?"
+is_test_command "$T/php"  "composer test 2>&1 | tee out.txt";      check "composer test | tee"          "0" "$?"
+is_test_command "$T/php"  "php artisan test --filter=Invoice";     check "artisan test --filter"        "0" "$?"
+is_test_command "$T/php"  "./vendor/bin/pest tests/Unit";          check "./vendor/bin/pest"             "0" "$?"
+is_test_command "$T/php"  "vendor/bin/phpunit";                    check "vendor/bin/phpunit"            "0" "$?"
+is_test_command "$T/node" "npm test";                              check "npm test"                      "0" "$?"
+is_test_command "$T/node" "npm run test -- --watch=false";         check "npm run test -- --watch=false" "0" "$?"
+is_test_command "$T/node" "npx vitest run";                        check "npx vitest run"                "0" "$?"
+is_test_command "$T/mk"   "make test";                             check "make test"                     "0" "$?"
+is_test_command "$T/php"  "FOO=1 composer test";                   check "FOO=1 composer test"           "0" "$?"
+is_test_command "$T/php"  "echo hi && composer test";              check "echo hi && composer test"      "0" "$?"
+
+echo "11. is_test_command REJECTS naive-substring false accepts (Finding 1)"
+is_test_command "$T/php" "cat tests/FooTest.php";                    check "cat tests/FooTest.php"          "1" "$?"
+is_test_command "$T/php" "ls tests/";                                check "ls tests/"                      "1" "$?"
+is_test_command "$T/php" "rg phpunit";                               check "rg phpunit"                     "1" "$?"
+is_test_command "$T/php" "grep -rn pest .";                          check "grep -rn pest ."                "1" "$?"
+is_test_command "$T/php" "git log --oneline -- tests/";              check "git log --oneline -- tests/"    "1" "$?"
+is_test_command "$T/php" "find . -name '*Test.php'";                 check "find . -name '*Test.php'"       "1" "$?"
+is_test_command "$T/php" "# composer test";                          check "# composer test"                "1" "$?"
+is_test_command "$T/php" "printf 'composer test'";                   check "printf 'composer test'"         "1" "$?"
+is_test_command "$T/php" "echo composer test";                       check "echo composer test"             "1" "$?"
+is_test_command "$T/php" 'export CMD="composer test"';                check 'export CMD="composer test"'     "1" "$?"
+is_test_command "$T/php" "alias t='composer test'";                  check "alias t='composer test'"        "1" "$?"
+is_test_command "$T/php" "which pest";                               check "which pest"                     "1" "$?"
+is_test_command "$T/php" "man pest";                                 check "man pest"                       "1" "$?"
+is_test_command "$T/php" "cat tests/x.php && echo composer test";    check "cat ... && echo composer test"  "1" "$?"
+is_test_command "$T/php" "";                                         check "(empty string)"                 "1" "$?"
+is_test_command "$T/php" "   ";                                      check "(whitespace only)"               "1" "$?"
+
+echo "12. Finding 2 — denylist verb on one segment no longer poisons a later real test run"
+is_test_command "$T/php" "$(printf 'echo hi\ncomposer test')"; check "echo hi (line1) / composer test (line2)" "0" "$?"
+
+echo "13. documented limitation — false && composer test is still accepted (see comment in verify_gate.sh)"
+is_test_command "$T/php" "false && composer test"; check "false && composer test (known limitation)" "0" "$?"
+
+# --- Ecosystem coverage (this repo is now open-source and must not assume
+# --- a PHP/Node world). One fixture per ecosystem: assert detected/source/
+# --- command, assert the real runner ACCEPTED, and assert a reader command
+# --- (that merely looks at test files) REJECTED.
+
+echo "14. Python — pyproject.toml (generic, no tool section)"
+mkdir -p "$T/py-generic"
+printf '[project]\nname = "x"\n' > "$T/py-generic/pyproject.toml"
+check "detected" "true"            "$(field "$T/py-generic" detected)"
+check "source"   "pyproject.toml"  "$(field "$T/py-generic" source)"
+check "command"  "pytest"          "$(field "$T/py-generic" command)"
+is_test_command "$T/py-generic" "pytest -k foo";        check "pytest -k foo"        "0" "$?"
+is_test_command "$T/py-generic" "python -m pytest";     check "python -m pytest"     "0" "$?"
+is_test_command "$T/py-generic" "python3 -m pytest -k x"; check "python3 -m pytest"  "0" "$?"
+is_test_command "$T/py-generic" "python -m unittest";   check "python -m unittest"   "0" "$?"
+is_test_command "$T/py-generic" "uv run pytest";        check "uv run pytest"        "0" "$?"
+is_test_command "$T/py-generic" "cat main_test.py";     check "cat main_test.py"     "1" "$?"
+is_test_command "$T/py-generic" "echo pytest";          check "echo pytest"          "1" "$?"
+is_test_command "$T/py-generic" "# pytest";              check "# pytest"             "1" "$?"
+is_test_command "$T/py-generic" 'grep -r "pytest" .';    check 'grep -r "pytest" .'   "1" "$?"
+
+echo "15. Python — pyproject.toml [tool.poetry]"
+mkdir -p "$T/py-poetry"
+printf '[tool.poetry]\nname = "x"\n' > "$T/py-poetry/pyproject.toml"
+check "detected" "true"                             "$(field "$T/py-poetry" detected)"
+check "source"   "pyproject.toml [tool.poetry]"     "$(field "$T/py-poetry" source)"
+check "command"  "poetry run pytest"                 "$(field "$T/py-poetry" command)"
+is_test_command "$T/py-poetry" "poetry run pytest";  check "poetry run pytest" "0" "$?"
+
+echo "16. Python — pyproject.toml [tool.hatch]"
+mkdir -p "$T/py-hatch"
+printf '[tool.hatch.envs.default]\n' > "$T/py-hatch/pyproject.toml"
+check "detected" "true"                          "$(field "$T/py-hatch" detected)"
+check "source"   "pyproject.toml [tool.hatch]"   "$(field "$T/py-hatch" source)"
+check "command"  "hatch test"                     "$(field "$T/py-hatch" command)"
+is_test_command "$T/py-hatch" "hatch test";       check "hatch test" "0" "$?"
+
+echo "17. Python — tox.ini, setup.py, Pipfile fall back to tox/pytest"
+mkdir -p "$T/py-tox"; printf '[tox]\nenvlist = py311\n' > "$T/py-tox/tox.ini"
+check "detected" "true"    "$(field "$T/py-tox" detected)"
+check "source"   "tox.ini" "$(field "$T/py-tox" source)"
+check "command"  "tox"     "$(field "$T/py-tox" command)"
+is_test_command "$T/py-tox" "tox";  check "tox"  "0" "$?"
+is_test_command "$T/py-tox" "nox";  check "nox"  "0" "$?"
+
+mkdir -p "$T/py-setup"; printf 'from setuptools import setup\nsetup()\n' > "$T/py-setup/setup.py"
+check "detected" "true"    "$(field "$T/py-setup" detected)"
+check "source"   "setup.py" "$(field "$T/py-setup" source)"
+
+mkdir -p "$T/py-pipfile"; printf '[packages]\n' > "$T/py-pipfile/Pipfile"
+check "detected" "true"    "$(field "$T/py-pipfile" detected)"
+check "source"   "Pipfile" "$(field "$T/py-pipfile" source)"
+
+echo "18. Go — go.mod"
+mkdir -p "$T/go1"; printf 'module example.com/x\n\ngo 1.22\n' > "$T/go1/go.mod"
+check "detected" "true"          "$(field "$T/go1" detected)"
+check "source"   "go.mod"        "$(field "$T/go1" source)"
+check "command"  "go test ./..." "$(field "$T/go1" command)"
+is_test_command "$T/go1" "go test ./...";       check "go test ./..."         "0" "$?"
+is_test_command "$T/go1" "cat main_test.go";    check "cat main_test.go"      "1" "$?"
+is_test_command "$T/go1" "echo go test";        check "echo go test"          "1" "$?"
+is_test_command "$T/go1" 'grep -r "go test" .';  check 'grep -r "go test" .'   "1" "$?"
+
+echo "19. Rust — Cargo.toml"
+mkdir -p "$T/rust1"; printf '[package]\nname = "x"\nversion = "0.1.0"\n' > "$T/rust1/Cargo.toml"
+check "detected" "true"        "$(field "$T/rust1" detected)"
+check "source"   "Cargo.toml"  "$(field "$T/rust1" source)"
+check "command"  "cargo test"  "$(field "$T/rust1" command)"
+is_test_command "$T/rust1" "cargo test";           check "cargo test"           "0" "$?"
+is_test_command "$T/rust1" "cargo nextest run";    check "cargo nextest run"    "0" "$?"
+is_test_command "$T/rust1" "cat Cargo.toml";       check "cat Cargo.toml"       "1" "$?"
+is_test_command "$T/rust1" "echo cargo test";      check "echo cargo test"      "1" "$?"
+
+echo "20. Ruby — Gemfile (rspec) and Rakefile fallback"
+mkdir -p "$T/ruby-rspec"; printf 'source "https://rubygems.org"\ngem "rspec"\n' > "$T/ruby-rspec/Gemfile"
+check "detected" "true"              "$(field "$T/ruby-rspec" detected)"
+check "source"   "Gemfile (rspec)"   "$(field "$T/ruby-rspec" source)"
+check "command"  "bundle exec rspec" "$(field "$T/ruby-rspec" command)"
+is_test_command "$T/ruby-rspec" "bundle exec rspec";  check "bundle exec rspec"  "0" "$?"
+is_test_command "$T/ruby-rspec" "rspec spec/foo_spec.rb"; check "rspec spec/foo_spec.rb" "0" "$?"
+is_test_command "$T/ruby-rspec" "ls spec/";            check "ls spec/"           "1" "$?"
+is_test_command "$T/ruby-rspec" "cat spec/foo_spec.rb"; check "cat spec/foo_spec.rb" "1" "$?"
+
+mkdir -p "$T/ruby-rake"; printf 'task :test do\nend\n' > "$T/ruby-rake/Rakefile"
+check "detected" "true"     "$(field "$T/ruby-rake" detected)"
+check "source"   "Rakefile" "$(field "$T/ruby-rake" source)"
+check "command"  "rake test" "$(field "$T/ruby-rake" command)"
+is_test_command "$T/ruby-rake" "rake test";              check "rake test"              "0" "$?"
+is_test_command "$T/ruby-rake" "bundle exec rake test";  check "bundle exec rake test"  "0" "$?"
+is_test_command "$T/ruby-rake" "minitest";                check "minitest"               "0" "$?"
+
+echo "21. Java/Kotlin — pom.xml and build.gradle(.kts)"
+mkdir -p "$T/java-mvn"; printf '<project></project>\n' > "$T/java-mvn/pom.xml"
+check "detected" "true"     "$(field "$T/java-mvn" detected)"
+check "source"   "pom.xml"  "$(field "$T/java-mvn" source)"
+check "command"  "mvn test" "$(field "$T/java-mvn" command)"
+is_test_command "$T/java-mvn" "mvn test";  check "mvn test" "0" "$?"
+is_test_command "$T/java-mvn" "which mvn"; check "which mvn" "1" "$?"
+
+mkdir -p "$T/java-gradle"; printf 'plugins { id "java" }\n' > "$T/java-gradle/build.gradle"
+check "detected" "true"          "$(field "$T/java-gradle" detected)"
+check "source"   "build.gradle"  "$(field "$T/java-gradle" source)"
+check "command"  "gradle test"   "$(field "$T/java-gradle" command)"
+is_test_command "$T/java-gradle" "gradle test";   check "gradle test"   "0" "$?"
+
+mkdir -p "$T/java-gradlew"; printf 'plugins { id "java" }\n' > "$T/java-gradlew/build.gradle.kts"
+printf '#!/bin/sh\n' > "$T/java-gradlew/gradlew"; chmod +x "$T/java-gradlew/gradlew"
+check "detected" "true"              "$(field "$T/java-gradlew" detected)"
+check "source"   "build.gradle.kts"  "$(field "$T/java-gradlew" source)"
+check "command"  "./gradlew test"    "$(field "$T/java-gradlew" command)"
+is_test_command "$T/java-gradlew" "./gradlew test"; check "./gradlew test" "0" "$?"
+
+echo "22. .NET — *.csproj / *.sln"
+mkdir -p "$T/dotnet1"; printf '<Project Sdk="Microsoft.NET.Sdk"></Project>\n' > "$T/dotnet1/App.csproj"
+check "detected" "true"             "$(field "$T/dotnet1" detected)"
+check "source"   "*.csproj/*.sln"   "$(field "$T/dotnet1" source)"
+check "command"  "dotnet test"      "$(field "$T/dotnet1" command)"
+is_test_command "$T/dotnet1" "dotnet test";     check "dotnet test"     "0" "$?"
+is_test_command "$T/dotnet1" "cat App.csproj";  check "cat App.csproj"  "1" "$?"
+
+echo "23. Elixir — mix.exs"
+mkdir -p "$T/elixir1"; printf 'defmodule X.MixProject do\nend\n' > "$T/elixir1/mix.exs"
+check "detected" "true"       "$(field "$T/elixir1" detected)"
+check "source"   "mix.exs"    "$(field "$T/elixir1" source)"
+check "command"  "mix test"   "$(field "$T/elixir1" command)"
+is_test_command "$T/elixir1" "mix test";      check "mix test"      "0" "$?"
+is_test_command "$T/elixir1" "cat mix.exs";   check "cat mix.exs"   "1" "$?"
+
+echo "24. polyglot precedence — a declared package.json scripts.test wins over a Python manifest"
+mkdir -p "$T/poly"
+printf '{"scripts":{"test":"jest"}}' > "$T/poly/package.json"
+printf '[project]\nname = "x"\n' > "$T/poly/pyproject.toml"
+check "detected" "true"                       "$(field "$T/poly" detected)"
+check "source"   "package.json scripts.test"  "$(field "$T/poly" source)"
+check "command"  "npm test"                   "$(field "$T/poly" command)"
+
+echo "25. polyglot precedence — a declared composer.json scripts.test wins over a Go manifest"
+mkdir -p "$T/poly2"
+printf '{"scripts":{"test":"pest"}}' > "$T/poly2/composer.json"
+printf 'module example.com/x\n' > "$T/poly2/go.mod"
+check "detected" "true"                       "$(field "$T/poly2" detected)"
+check "source"   "composer.json scripts.test" "$(field "$T/poly2" source)"
+check "command"  "composer test"              "$(field "$T/poly2" command)"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

@@ -1,0 +1,11 @@
+{
+  "name": "oltrematica/bad-harness-fixture",
+  "description": "Deliberately defective harness. Test fixture — not a real project.",
+  "type": "project",
+  "require": {
+    "php": "^8.4"
+  },
+  "scripts": {
+    "lint": "pint"
+  }
+}

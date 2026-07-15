@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Test contract for scripts/install.sh. Run from repo root: bash tests/install.sh.test
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INSTALL="$REPO_ROOT/scripts/install.sh"
+PASS=0; FAIL=0
+check() { # check <description> <expected> <actual>
+  if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1))
+  else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi
+}
+
+TARGET=$(mktemp -d)
+trap 'rm -rf "$TARGET"' EXIT
+
+echo "1. installs a compliance skill to .claude/skills/<name>/"
+bash "$INSTALL" adr-management --to "$TARGET" >/dev/null 2>&1
+check "exit code" "0" "$?"
+check "SKILL.md landed at the flat destination path" "yes" \
+  "$([ -f "$TARGET/.claude/skills/adr-management/SKILL.md" ] && echo yes || echo no)"
+check "script came along" "yes" \
+  "$([ -f "$TARGET/.claude/skills/adr-management/scripts/new_adr.sh" ] && echo yes || echo no)"
+check "track dir is NOT recreated in the target" "no" \
+  "$([ -d "$TARGET/.claude/skills/compliance" ] && echo yes || echo no)"
+
+echo "2. installs multiple skills in one call"
+bash "$INSTALL" adr-management cra-evidence --to "$TARGET" >/dev/null 2>&1
+check "exit code" "0" "$?"
+check "second skill landed" "yes" \
+  "$([ -f "$TARGET/.claude/skills/cra-evidence/SKILL.md" ] && echo yes || echo no)"
+
+echo "3. unknown skill name fails loudly"
+ERR=$(bash "$INSTALL" no-such-skill --to "$TARGET" 2>&1); RC=$?
+check "exit code" "1" "$RC"
+check "names the unknown skill" "yes" "$(echo "$ERR" | grep -q "no-such-skill" && echo yes || echo no)"
+check "lists what IS available" "yes" "$(echo "$ERR" | grep -q "adr-management" && echo yes || echo no)"
+
+echo "4. missing --to is a usage error"
+bash "$INSTALL" adr-management >/dev/null 2>&1
+check "exit code" "2" "$?"
+
+echo "5. target path containing spaces is handled correctly"
+SPACED="$TARGET/my target dir"
+mkdir -p "$SPACED"
+bash "$INSTALL" adr-management --to "$SPACED" >/dev/null 2>&1
+check "exit code" "0" "$?"
+check "SKILL.md landed under spaced path" "yes" \
+  "$([ -f "$SPACED/.claude/skills/adr-management/SKILL.md" ] && echo yes || echo no)"
+
+echo "6. target that exists but is a plain file fails loudly"
+FILE_TARGET=$(mktemp)
+ERR=$(bash "$INSTALL" adr-management --to "$FILE_TARGET" 2>&1); RC=$?
+check "exit code" "2" "$RC"
+check "explains target is not a directory" "yes" \
+  "$(echo "$ERR" | grep -qi "not a directory" && echo yes || echo no)"
+rm -f "$FILE_TARGET"
+
+echo "7. relative target path is honored from the caller's cwd"
+RELBASE=$(mktemp -d)
+mkdir -p "$RELBASE/relhere"
+(cd "$RELBASE" && bash "$INSTALL" adr-management --to "relhere" >/dev/null 2>&1)
+check "exit code" "0" "$?"
+check "SKILL.md landed under relative target" "yes" \
+  "$([ -f "$RELBASE/relhere/.claude/skills/adr-management/SKILL.md" ] && echo yes || echo no)"
+rm -rf "$RELBASE"
+
+echo "8. reinstalling over an existing installation drops stale files"
+STALE_TARGET=$(mktemp -d)
+bash "$INSTALL" adr-management --to "$STALE_TARGET" >/dev/null 2>&1
+touch "$STALE_TARGET/.claude/skills/adr-management/STALE_FROM_OLD_VERSION.txt"
+bash "$INSTALL" adr-management --to "$STALE_TARGET" >/dev/null 2>&1
+check "exit code" "0" "$?"
+check "stale file removed on reinstall" "no" \
+  "$([ -f "$STALE_TARGET/.claude/skills/adr-management/STALE_FROM_OLD_VERSION.txt" ] && echo yes || echo no)"
+check "SKILL.md still present after reinstall" "yes" \
+  "$([ -f "$STALE_TARGET/.claude/skills/adr-management/SKILL.md" ] && echo yes || echo no)"
+rm -rf "$STALE_TARGET"
+
+echo "9. glob metacharacter as a skill name is rejected, not silently resolved"
+GLOB_TARGET=$(mktemp -d)
+ERR=$(bash "$INSTALL" '*' --to "$GLOB_TARGET" 2>&1); RC=$?
+check "exit code" "1" "$RC"
+check "no literal '*' directory created anywhere under target" "no" \
+  "$(find "$GLOB_TARGET" -depth -type d 2>/dev/null | grep -q '/\*$' && echo yes || echo no)"
+check "nothing installed under .claude/skills" "no" \
+  "$([ -d "$GLOB_TARGET/.claude/skills" ] && echo yes || echo no)"
+rm -rf "$GLOB_TARGET"
+
+echo "10. skill name ambiguous across tracks fails loudly and names both tracks"
+HARNESS_FIXTURE="$REPO_ROOT/skills/harness/adr-management"
+# skills/harness/ may already contain real, committed skills (e.g. harness-audit) —
+# only remove the fixture subdirectory we create here, never the whole track dir.
+cleanup_fixture() { rm -rf "$HARNESS_FIXTURE"; }
+trap 'cleanup_fixture; rm -rf "$TARGET"' EXIT
+mkdir -p "$HARNESS_FIXTURE"
+echo "# fixture" > "$HARNESS_FIXTURE/SKILL.md"
+AMBIG_TARGET=$(mktemp -d)
+ERR=$(bash "$INSTALL" adr-management --to "$AMBIG_TARGET" 2>&1); RC=$?
+check "exit code" "1" "$RC"
+check "names the compliance track" "yes" \
+  "$(echo "$ERR" | grep -q "compliance/adr-management" && echo yes || echo no)"
+check "names the harness track" "yes" \
+  "$(echo "$ERR" | grep -q "harness/adr-management" && echo yes || echo no)"
+rm -rf "$AMBIG_TARGET"
+cleanup_fixture
+trap 'rm -rf "$TARGET"' EXIT
+
+echo "11. '.', '..', and a name containing '/' are rejected explicitly"
+DOT_TARGET=$(mktemp -d)
+ERR=$(bash "$INSTALL" . --to "$DOT_TARGET" 2>&1); RC=$?
+check "'.' exit code 2" "2" "$RC"
+check "'.' names the rejection" "yes" "$(echo "$ERR" | grep -qi "not a valid skill name" && echo yes || echo no)"
+ERR=$(bash "$INSTALL" .. --to "$DOT_TARGET" 2>&1); RC=$?
+check "'..' exit code 2" "2" "$RC"
+check "'..' names the rejection" "yes" "$(echo "$ERR" | grep -qi "not a valid skill name" && echo yes || echo no)"
+ERR=$(bash "$INSTALL" a/b --to "$DOT_TARGET" 2>&1); RC=$?
+check "'a/b' exit code 2" "2" "$RC"
+check "'a/b' names the rejection" "yes" "$(echo "$ERR" | grep -qi "must not contain" && echo yes || echo no)"
+check "nothing installed for any of the three" "no" \
+  "$([ -d "$DOT_TARGET/.claude/skills" ] && echo yes || echo no)"
+rm -rf "$DOT_TARGET"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

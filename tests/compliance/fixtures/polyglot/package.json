@@ -1,0 +1,9 @@
+{
+  "name": "polyglot-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fixture: minimal Node repo with a known-vulnerable pinned dependency (lodash 4.17.15)",
+  "dependencies": {
+    "lodash": "4.17.15"
+  }
+}

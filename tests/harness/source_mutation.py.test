@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Contract test for lib/source_mutation.py (Finding 1, adversarial review of
+# feature/verification-hook): does a Bash command mutate a source file?
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SM="$ROOT/hooks/scripts/lib/source_mutation.py"
+PASS=0; FAIL=0
+check(){ if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1));
+         else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi; }
+
+# mutates <cmd> [is_test:0|1] -> "0" (mutation detected, exit 0) or "1" (not)
+mutates(){ python3 "$SM" "$1" "${2:-0}" >/dev/null 2>&1; echo $?; }
+
+echo "-- verb-based: unconditional mutators --"
+check "cp records"       "0" "$(mutates "cp a.php b.php")"
+check "mv records"       "0" "$(mutates "mv a.php b.php")"
+check "touch records"    "0" "$(mutates "touch app/Foo.php")"
+check "patch records (no target extractable, still counts)" "0" "$(mutates "patch -p1 < fix.diff")"
+check "dd of= records"   "0" "$(mutates "dd if=/dev/zero of=app/Foo.php bs=1 count=1")"
+check "install records"  "0" "$(mutates "install -m644 src/Foo.php dest/Foo.php")"
+check "truncate records" "0" "$(mutates "truncate -s0 app/Foo.php")"
+
+echo "-- verb-based: sed/perl gated on -i --"
+check "sed -i records"         "0" "$(mutates "sed -i '' 's/a/b/' app/Foo.php")"
+check "sed -i.bak records"     "0" "$(mutates "sed -i.bak 's/a/b/' app/Foo.php")"
+check "sed without -i does NOT" "1" "$(mutates "sed 's/a/b/' app/Foo.php")"
+check "perl -i records"        "0" "$(mutates "perl -i -pe 's/a/b/' app/Foo.php")"
+check "perl without -i does NOT" "1" "$(mutates "perl -pe 's/a/b/' app/Foo.php")"
+
+echo "-- verb-based: tee --"
+check "tee standalone records"              "0" "$(mutates "echo hi | tee app/Foo.php")"
+check "tee alongside a test command does NOT" "1" "$(mutates "composer test 2>&1 | tee out.txt" 1)"
+check "tee -a standalone still records"     "0" "$(mutates "echo hi | tee -a app/Foo.php")"
+
+echo "-- verb-based: python3 -c that writes --"
+check "python3 -c open(...,'w') records" "0" \
+  "$(mutates "python3 -c \"open('app/Foo.php','w').write('x')\"")"
+check "python3 -c .write_text( records" "0" \
+  "$(mutates "python3 -c \"from pathlib import Path; Path('app/Foo.php').write_text('x')\"")"
+check "python3 -c read-only does NOT" "1" \
+  "$(mutates "python3 -c \"print(open('app/Foo.php').read())\"")"
+check "plain python3 script.py (no -c) does NOT" "1" "$(mutates "python3 migrate.py")"
+
+echo "-- redirects --"
+check "cat > file records"           "0" "$(mutates "cat > app/Foo.php")"
+check "echo >> file (append) records" "0" "$(mutates "echo more >> app/Foo.php")"
+check "redirect both streams (&>) records" "0" "$(mutates "build.sh &> app/Foo.php")"
+check "echo > /tmp/x does NOT"        "1" "$(mutates "echo hi > /tmp/x")"
+check "echo > /private/tmp/x does NOT" "1" "$(mutates "echo hi > /private/tmp/x")"
+check "ls > /dev/null does NOT"       "1" "$(mutates "ls > /dev/null")"
+check "2>&1 alone (fd merge, no file) does NOT" "1" "$(mutates "composer test 2>&1")"
+check "1>&2 alone (fd merge, no file) does NOT" "1" "$(mutates "echo hi 1>&2")"
+
+echo "-- the same-source-file rule (not *.md, not LICENSE, not docs/) applies to Bash targets too --"
+check "sed -i into .md does NOT"        "1" "$(mutates "sed -i '' 's/a/b/' CHANGES.md")"
+check "cp into LICENSE does NOT"        "1" "$(mutates "cp a.txt LICENSE")"
+check "cat > docs/x.php does NOT"       "1" "$(mutates "cat > docs/x.php")"
+check "cat > nested/docs/x.php does NOT" "1" "$(mutates "cat > nested/docs/x.php")"
+check "cat > app/docs-helper.php still records (docs in name, not a path segment)" "0" \
+  "$(mutates "cat > app/docs-helper.php")"
+
+echo "-- negative controls: ordinary read-only commands never record --"
+check "cat file (no redirect) does NOT"  "1" "$(mutates "cat app/Foo.php")"
+check "git status does NOT"              "1" "$(mutates "git status")"
+check "composer test alone does NOT"     "1" "$(mutates "composer test" 1)"
+check "grep -rn foo does NOT"            "1" "$(mutates "grep -rn foo app/")"
+
+echo "-- robustness: does not crash on adversarial/empty input --"
+check "empty command does NOT (no traceback)" "1" "$(mutates "")"
+# An unterminated quote can't be parsed cleanly; falling through to "record
+# anyway" (exit 0) is the fail-toward-recording direction, not a bug — the
+# assertion here is "a valid exit code", not "which one".
+rc=$(python3 "$SM" "sed -i 'unterminated" 0 >/dev/null 2>&1; echo $?)
+check "unbalanced quote does not crash (exit 0 or 1)" "yes" \
+  "$([ "$rc" = "0" ] || [ "$rc" = "1" ] && echo yes || echo no)"
+check "comment-only line does NOT"             "1" "$(mutates "# just a comment")"
+check "no argv at all -> exit 1, no traceback" "1" "$(python3 "$SM" >/dev/null 2>&1; echo $?)"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

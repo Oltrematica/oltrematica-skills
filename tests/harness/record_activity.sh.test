@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REC="$ROOT/hooks/scripts/record_activity.sh"
+PASS=0; FAIL=0
+check(){ if [ "$2" = "$3" ]; then echo "  PASS: $1"; PASS=$((PASS+1));
+         else echo "  FAIL: $1 (expected '$2', got '$3')"; FAIL=$((FAIL+1)); fi; }
+
+export OLTREMATICA_STATE_DIR=$(mktemp -d)
+REPO=$(mktemp -d)
+trap 'rm -rf "$OLTREMATICA_STATE_DIR" "$REPO"' EXIT
+printf '{"scripts":{"test":"pest"}}' > "$REPO/composer.json"
+# shellcheck source=/dev/null
+. "$ROOT/hooks/scripts/lib/state.sh"
+
+S=rec-1
+feed(){ printf '%s' "$1" | bash "$REC" >/dev/null 2>&1; echo $?; }
+
+echo "1. a test command records last_test_pass"
+rc=$(feed "{\"session_id\":\"$S\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"composer test\"},\"tool_response\":{}}")
+check "exit 0 (recorders never block)" "0" "$rc"
+check "last_test_pass set" "yes" \
+  "$([ "$(state_get $S last_test_pass)" -gt 0 ] && echo yes || echo no)"
+check "test_evidence is passed, not ran" "passed" "$(state_get $S test_evidence)"
+
+echo "2. a NON-test command records nothing"
+S2=rec-2
+feed "{\"session_id\":\"$S2\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"},\"tool_response\":{}}" >/dev/null
+check "last_test_pass untouched" "0" "$(state_get $S2 last_test_pass)"
+check "test_evidence untouched" "" "$(state_get $S2 test_evidence)"
+
+echo "3. reading a test file is NOT running tests"
+S3=rec-3
+feed "{\"session_id\":\"$S3\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat tests/FooTest.php\"},\"tool_response\":{}}" >/dev/null
+check "last_test_pass untouched" "0" "$(state_get $S3 last_test_pass)"
+
+echo "4. editing a source file records last_source_edit"
+S4=rec-4
+feed "{\"session_id\":\"$S4\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$REPO/app/Foo.php\"},\"tool_response\":{}}" >/dev/null
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S4 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "5. editing a TEST file counts as source (a green suite is now stale)"
+S5=rec-5
+feed "{\"session_id\":\"$S5\",\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REPO/tests/FooTest.php\"},\"tool_response\":{}}" >/dev/null
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S5 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "6. editing a .md file does NOT count as source"
+S6=rec-6
+feed "{\"session_id\":\"$S6\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$REPO/README.md\"},\"tool_response\":{}}" >/dev/null
+check "last_source_edit untouched" "0" "$(state_get $S6 last_source_edit)"
+
+echo "7. malformed stdin does not crash and never blocks"
+rc=$(printf 'not json{{{' | bash "$REC" >/dev/null 2>&1; echo $?)
+check "exit 0 on garbage" "0" "$rc"
+rc=$(printf '' | bash "$REC" >/dev/null 2>&1; echo $?)
+check "exit 0 on empty" "0" "$rc"
+
+echo "8. Bash call with no command field does not crash and touches nothing"
+S8=rec-8
+rc=$(feed "{\"session_id\":\"$S8\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_test_pass untouched" "0" "$(state_get $S8 last_test_pass)"
+
+echo "9. Write with no file_path does not crash and touches nothing"
+S9=rec-9
+rc=$(feed "{\"session_id\":\"$S9\",\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S9 last_source_edit)"
+
+echo "10. file path with spaces and unicode is handled"
+S10=rec-10
+rc=$(feed "{\"session_id\":\"$S10\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$REPO/app/Foó Bar 日本.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S10 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "11. relative file path still counts as source"
+S11=rec-11
+rc=$(feed "{\"session_id\":\"$S11\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"app/Foo.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S11 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "12. a nested docs/ directory is still exempt"
+S12=rec-12
+rc=$(feed "{\"session_id\":\"$S12\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$REPO/module/docs/guide/Foo.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S12 last_source_edit)"
+
+echo "13. missing session_id does not crash and writes nothing"
+rc=$(printf '{"cwd":"%s","tool_name":"Bash","tool_input":{"command":"composer test"},"tool_response":{}}' "$REPO" | bash "$REC" >/dev/null 2>&1; echo $?)
+check "exit 0" "0" "$rc"
+
+echo "14. an unrecognised tool name is ignored, not crashed on"
+S14=rec-14
+rc=$(feed "{\"session_id\":\"$S14\",\"cwd\":\"$REPO\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$REPO/app/Foo.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S14 last_source_edit)"
+
+echo "15. a LICENSE file does NOT count as source"
+S15=rec-15
+rc=$(feed "{\"session_id\":\"$S15\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$REPO/LICENSE\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S15 last_source_edit)"
+
+echo "16. NotebookEdit is treated the same as Write/Edit for the source rule"
+S16=rec-16
+rc=$(feed "{\"session_id\":\"$S16\",\"cwd\":\"$REPO\",\"tool_name\":\"NotebookEdit\",\"tool_input\":{\"file_path\":\"$REPO/notebooks/Foo.ipynb\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S16 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "17. top-level relative docs/ path is exempt"
+S17=rec-17
+rc=$(feed "{\"session_id\":\"$S17\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"docs/nested/deep/x.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S17 last_source_edit)"
+
+echo "18. top-level relative docs/ with markdown is also exempt"
+S18=rec-18
+rc=$(feed "{\"session_id\":\"$S18\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"docs/guide.md\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S18 last_source_edit)"
+
+echo "19. file with docs in name but not as path segment is still source"
+S19=rec-19
+rc=$(feed "{\"session_id\":\"$S19\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"app/docs-helper.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S19 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "20. control: normal app source is recorded"
+S20=rec-20
+rc=$(feed "{\"session_id\":\"$S20\",\"cwd\":\"$REPO\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"app/Foo.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S20 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "21. FINDING 1: sed -i (Bash-mediated) on a source file records last_source_edit"
+S21=rec-21
+rc=$(feed "{\"session_id\":\"$S21\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sed -i '' 's/hi/bye/' app/Foo2.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S21 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "22. FINDING 1: cat > file (Bash-mediated, plain redirect) records last_source_edit"
+S22=rec-22
+rc=$(feed "{\"session_id\":\"$S22\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > app/Foo3.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S22 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "23. FINDING 1: a heredoc into a source file records last_source_edit"
+S23=rec-23
+rc=$(feed "{\"session_id\":\"$S23\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > app/Foo4.php <<'EOF'\\nnew content\\nEOF\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S23 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "24. FINDING 1: echo hi > /tmp/x does NOT record (redirect target is /tmp)"
+S24=rec-24
+rc=$(feed "{\"session_id\":\"$S24\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi > /tmp/x\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S24 last_source_edit)"
+
+echo "25. FINDING 1: ls > /dev/null does NOT record"
+S25=rec-25
+rc=$(feed "{\"session_id\":\"$S25\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls > /dev/null\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S25 last_source_edit)"
+
+echo "26. FINDING 1: composer test 2>&1 | tee out.txt records a TEST PASS and does NOT record a source edit"
+S26=rec-26
+rc=$(feed "{\"session_id\":\"$S26\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"composer test 2>&1 | tee out.txt\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_test_pass set" "yes" \
+  "$([ "$(state_get $S26 last_test_pass)" -gt 0 ] && echo yes || echo no)"
+check "last_source_edit untouched" "0" "$(state_get $S26 last_source_edit)"
+
+echo "27. FINDING 1: perl -i (Bash-mediated) on a source file records last_source_edit"
+S27=rec-27
+rc=$(feed "{\"session_id\":\"$S27\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"perl -i -pe 's/hi/bye/' app/Foo5.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S27 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "28. FINDING 1: sed WITHOUT -i does NOT record (prints to stdout, does not touch disk)"
+S28=rec-28
+rc=$(feed "{\"session_id\":\"$S28\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sed 's/hi/bye/' app/Foo6.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S28 last_source_edit)"
+
+echo "29. FINDING 1: cp / mv / touch (Bash-mediated) record last_source_edit"
+S29=rec-29
+rc=$(feed "{\"session_id\":\"$S29\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cp app/Foo.php app/Foo7.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S29 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "30. FINDING 1: tee STANDALONE (no accompanying test command) records last_source_edit"
+S30=rec-30
+rc=$(feed "{\"session_id\":\"$S30\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi | tee app/Foo8.php\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit set" "yes" \
+  "$([ "$(state_get $S30 last_source_edit)" -gt 0 ] && echo yes || echo no)"
+
+echo "31. FINDING 1: a redirect into a .md file does NOT record (same source-file rule as Write/Edit)"
+S31=rec-31
+rc=$(feed "{\"session_id\":\"$S31\",\"cwd\":\"$REPO\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > CHANGES.md\"},\"tool_response\":{}}")
+check "exit 0" "0" "$rc"
+check "last_source_edit untouched" "0" "$(state_get $S31 last_source_edit)"
+
+echo
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

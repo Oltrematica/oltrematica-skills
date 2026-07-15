@@ -1,0 +1,9 @@
+{
+  "name": "oltrematica/laravel-minimal-fixture",
+  "description": "Fixture: minimal PHP/Laravel-style repo with a known-vulnerable pinned dependency (guzzle 7.4.0)",
+  "type": "project",
+  "require": {
+    "php": "^8.4",
+    "guzzlehttp/guzzle": "7.4.0"
+  }
+}
