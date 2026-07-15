@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>oltrematica-skills — your agent can't tell you when it's wrong</title>
+<meta name="description" content="A Claude Code plugin: harness assurance, EU compliance evidence, and the cost discipline that stops you hitting the usage limit — seven skills and a hook that won't let an agent claim the work is done when the tests are stale. MIT." />
+<style>
+  :root{
+    --ink:#0B0F14; --ink-2:#111721; --ink-3:#19202B;
+    --bg:#F5F6F8; --surface:#FFFFFF;
+    --text:#141A22; --muted:#5D6875;
+    --line:#DFE2E7; --line-2:#C4CAD3;
+    --signal:#9A6207; --signal-hi:#E8A33D;
+    --ok:#2F7A6B; --stop:#B23F38;
+    --mono: ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --r:3px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#0B0F14; --surface:#111721; --text:#E4E9F0; --muted:#8B97A6;
+           --line:#222B36; --line-2:#33404F; --signal:#E8A33D; --ok:#4FB3A0; --stop:#E0645C; }
+  }
+  :root[data-theme="dark"]{ --bg:#0B0F14; --surface:#111721; --text:#E4E9F0; --muted:#8B97A6;
+    --line:#222B36; --line-2:#33404F; --signal:#E8A33D; --ok:#4FB3A0; --stop:#E0645C; }
+  :root[data-theme="light"]{ --bg:#F5F6F8; --surface:#FFFFFF; --text:#141A22; --muted:#5D6875;
+    --line:#DFE2E7; --line-2:#C4CAD3; --signal:#9A6207; --ok:#2F7A6B; --stop:#B23F38; }
+
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+       font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--signal-hi);color:#0B0F14}
+  a{color:inherit;text-underline-offset:3px;text-decoration-color:var(--line-2)}
+  a:hover{text-decoration-color:var(--signal)}
+  :focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+
+  .wrap{max-width:1120px;margin:0 auto;padding:0 26px}
+  h1,h2,h3{margin:0;letter-spacing:-.024em;font-weight:680;line-height:1.1;text-wrap:balance}
+  h1{font-size:clamp(2.3rem,5.2vw,3.9rem);letter-spacing:-.035em;font-weight:720;max-width:15ch}
+  h2{font-size:clamp(1.6rem,2.8vw,2.2rem)}
+  h3{font-size:1.02rem;font-weight:660}
+  p{margin:0}
+  .muted{color:var(--muted)}
+  .lede{font-size:clamp(1.05rem,1.5vw,1.22rem);line-height:1.55;max-width:58ch}
+  .eyebrow{font-family:var(--mono);font-size:.67rem;letter-spacing:.16em;text-transform:uppercase;
+           color:var(--muted);display:flex;align-items:center;gap:.7em}
+  .eyebrow::before{content:"";width:14px;height:1px;background:var(--signal);flex:none}
+  section{padding:74px 0;border-top:1px solid var(--line)}
+  .stack{display:flex;flex-direction:column;gap:20px}
+
+  /* ---------- hero: the block message is the pitch ---------- */
+  .hero{padding:56px 0 66px;border-top:0}
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:20px;
+          font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--muted);padding:22px 0 46px}
+  .topbar b{color:var(--text);font-weight:600;letter-spacing:.14em}
+  .topbar .lic{border:1px solid var(--line-2);border-radius:999px;padding:4px 10px;letter-spacing:.08em}
+  .topbar .nav{display:flex;gap:16px}
+  .topbar .nav a{text-decoration:none;color:var(--muted)}
+  .topbar .nav a:hover{color:var(--signal)}
+  @media(max-width:720px){.topbar .nav{display:none}}
+
+  .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center}
+  @media(max-width:940px){.hero-grid{grid-template-columns:1fr;gap:38px}}
+
+  /* the terminal — the centrepiece */
+  .term{background:var(--ink);border:1px solid var(--ink-3);border-radius:6px;overflow:hidden;
+        box-shadow:0 22px 50px -28px rgba(0,0,0,.55)}
+  .term-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid var(--ink-3);
+            background:var(--ink-2)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#2C3542}
+  .term-t{font-family:var(--mono);font-size:.66rem;color:#6B7787;margin-left:8px;letter-spacing:.05em}
+  /* white-space:pre is load-bearing — without it the transcript reflows into prose
+     and stops reading as a terminal at all. */
+  .term-b{padding:18px 18px 20px;font-family:var(--mono);font-size:.775rem;line-height:1.72;
+          color:#C9D2DC;overflow-x:auto;white-space:pre}
+  .term-b .u{color:#6B7787}
+  .term-b .ok{color:#4FB3A0}
+  .term-b .a{color:#8B97A6}
+  .term-b .stop{color:#E0645C;font-weight:600}
+  .term-b .hi{color:#E8A33D}
+  .term-b .w{color:#F2F5F9}
+  .term-b .rule{display:block;border-top:1px dashed #2C3542;margin:10px 0}
+  .cursor{display:inline-block;width:7px;height:1em;background:#E8A33D;vertical-align:-2px;
+          animation:blink 1.05s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  @media(prefers-reduced-motion:reduce){.cursor{animation:none}}
+
+  /* ---------- install ---------- */
+  .cmd{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);
+       border-radius:var(--r);padding:13px 14px;font-family:var(--mono);font-size:.79rem;overflow-x:auto}
+  .cmd .p{color:var(--signal);flex:none}
+  .cmd code{white-space:nowrap}
+  .copy{margin-left:auto;flex:none;font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;
+        text-transform:uppercase;background:none;border:1px solid var(--line-2);border-radius:var(--r);
+        color:var(--muted);padding:5px 9px;cursor:pointer}
+  .copy:hover{border-color:var(--signal);color:var(--signal)}
+
+  /* ---------- stat strip ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+         border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+  .stat{padding:17px 19px;border-left:1px solid var(--line)}
+  .stat:first-child{border-left:0}
+  .stat .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.6rem;
+           font-weight:600;letter-spacing:-.02em}
+  .stat .l{font-family:var(--mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;
+           color:var(--muted);margin-top:6px}
+
+  /* ---------- tables / cards ---------- */
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:580px}
+  th,td{text-align:left;padding:13px 16px;border-top:1px solid var(--line);vertical-align:top}
+  thead th{border-top:0;font-family:var(--mono);font-size:.62rem;letter-spacing:.13em;
+           text-transform:uppercase;color:var(--muted);font-weight:500;white-space:nowrap}
+  .k{font-family:var(--mono);font-size:.85em;color:var(--signal);white-space:nowrap}
+  .trk{font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(288px,1fr));gap:1px;
+        background:var(--line);border:1px solid var(--line);border-radius:var(--r)}
+  .card{background:var(--surface);padding:24px 22px;display:flex;flex-direction:column;gap:9px}
+  .card .t{font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--signal)}
+  .card p{font-size:.93rem;color:var(--muted);line-height:1.6}
+  .card a.more{margin-top:auto;padding-top:6px;font-family:var(--mono);font-size:.68rem;
+       letter-spacing:.1em;text-transform:uppercase;color:var(--signal);text-decoration:none}
+  .card a.more:hover{text-decoration:underline;text-decoration-color:var(--signal)}
+
+  /* ---------- stacks ---------- */
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-family:var(--mono);font-size:.72rem;border:1px solid var(--line-2);border-radius:999px;
+        padding:6px 12px;color:var(--muted)}
+  .chip b{color:var(--text);font-weight:600}
+
+  /* ---------- buttons ---------- */
+  .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+  .btn{font-family:var(--mono);font-size:.75rem;letter-spacing:.05em;border:1px solid var(--line-2);
+       border-radius:var(--r);padding:10px 15px;text-decoration:none;color:var(--text);
+       transition:border-color .15s,color .15s}
+  .btn:hover{border-color:var(--signal);color:var(--signal)}
+  .btn.pri{border-color:var(--signal);color:var(--signal)}
+  .note{font-size:.87rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;max-width:64ch}
+  footer{padding:52px 0 66px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <div><b>oltrematica-skills</b></div>
+    <div style="display:flex;gap:18px;align-items:center">
+      <nav class="nav" aria-label="Sections">
+        <a href="#cost">Cost</a>
+        <a href="#assurance">Assurance</a>
+        <a href="#compliance">Compliance</a>
+      </nav>
+      <span class="lic">MIT</span>
+      <a href="https://github.com/Oltrematica/oltrematica-skills">GitHub</a>
+    </div>
+  </div>
+
+  <!-- ============ HERO: the block message IS the pitch ============ -->
+  <header class="hero">
+    <div class="hero-grid">
+      <div class="stack">
+        <div class="eyebrow">A Claude Code plugin</div>
+        <h1>Your agent can't tell you when it's&nbsp;wrong.</h1>
+        <p class="lede muted">
+          It will say the work is done. It will say the tests pass. It will mean it.
+          Seven skills that make the scaffolding auditable — and one hook that
+          simply <em>will not let it finish</em> until it has proof.
+        </p>
+        <div class="btns">
+          <a class="btn pri" href="#install">Install</a>
+          <a class="btn" href="#evidence">See the evidence</a>
+          <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills">Star on GitHub</a>
+        </div>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-t">claude — verification gate</span>
+        </div>
+        <div class="term-b">
+<span class="u">$</span> <span class="w">composer test</span>
+<span class="ok">PASS</span>  <span class="a">42 passed</span>
+
+<span class="u">$</span> <span class="w">…agent edits app/Invoice.php…</span>
+
+<span class="a">assistant:</span> <span class="w">Done. Fixed the invoice bug.</span>
+<span class="rule"></span><span class="stop">⛔ BLOCKED — verification gate</span>
+
+<span class="a">You claimed this work is done, but the tests
+are stale.</span>
+
+<span class="a">A source file was modified after the last test
+run, so the last green result does not describe
+the code you are about to hand over.</span>
+
+<span class="a">Run the test suite and report the actual output:</span>
+
+    <span class="hi">composer test</span>
+
+<span class="a">Do not restate that the work is complete
+without running it.</span>
+<span class="rule"></span><span class="u">$</span> <span class="w">composer test</span><span class="cursor"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats" style="margin-top:50px">
+      <div class="stat"><div class="n">7</div><div class="l">Skills</div></div>
+      <div class="stat"><div class="n">1</div><div class="l">Hook you can't skip</div></div>
+      <div class="stat"><div class="n">9</div><div class="l">Ecosystems</div></div>
+      <div class="stat"><div class="n">435</div><div class="l">Automated checks</div></div>
+      <div class="stat"><div class="n">372</div><div class="l">Blind judgements</div></div>
+    </div>
+  </header>
+
+  <!-- ============ INSTALL — early, because that's what they came for ============ -->
+  <section id="install">
+    <div class="stack">
+      <div class="eyebrow">Install</div>
+      <h2>Two commands.</h2>
+      <p class="muted" style="max-width:62ch">
+        This is the path that installs the verification gate along with the skills.
+        Requires Claude Code.
+      </p>
+    </div>
+
+    <div class="stack" style="margin-top:26px;gap:10px">
+      <div class="cmd">
+        <span class="p">$</span>
+        <code id="c1">claude plugin marketplace add https://github.com/Oltrematica/oltrematica-skills.git</code>
+        <button class="copy" data-c="c1">copy</button>
+      </div>
+      <div class="cmd">
+        <span class="p">$</span>
+        <code id="c2">claude plugin install oltrematica-skills@oltrematica</code>
+        <button class="copy" data-c="c2">copy</button>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:22px">
+      Then, in any repository: say <span class="k">"audit our harness"</span> and read what comes back.
+      There is a <code class="k">scripts/install.sh</code> fallback for repos that can't use the
+      marketplace — it ships the skills but <b>not</b> the gate.
+    </p>
+
+    <div class="stack" style="margin-top:34px;gap:12px">
+      <div class="eyebrow">Works with</div>
+      <div class="chips">
+        <span class="chip"><b>Python</b> pytest · tox · nox · uv</span>
+        <span class="chip"><b>Go</b> go test</span>
+        <span class="chip"><b>Rust</b> cargo</span>
+        <span class="chip"><b>Node</b> vitest · jest</span>
+        <span class="chip"><b>PHP</b> pest · phpunit</span>
+        <span class="chip"><b>Ruby</b> rspec · rake</span>
+        <span class="chip"><b>Java/Kotlin</b> maven · gradle</span>
+        <span class="chip"><b>.NET</b> dotnet test</span>
+        <span class="chip"><b>Elixir</b> mix</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE THREE THESES ============ -->
+  <section>
+    <div class="stack">
+      <div class="eyebrow">Why</div>
+      <h2>Three failures. None of them announces itself.</h2>
+    </div>
+    <div class="grid" style="margin-top:30px">
+      <div class="card">
+        <div class="t">The harness fails through invisibility</div>
+        <h3>Nothing tells you it broke.</h3>
+        <p>
+          A <span class="k">CLAUDE.md</span> grows until the agent quietly stops obeying half of it.
+          A skill's description drifts until it fires on everything, or on nothing. There is no error
+          message and no alert. The agent just gets worse — and the team concludes the model got worse.
+        </p>
+        <a class="more" href="#assurance">Harness assurance →</a>
+      </div>
+      <div class="card">
+        <div class="t">Cost fails through accumulation</div>
+        <h3>You paid for that file dump 27&nbsp;times.</h3>
+        <p>
+          Usage is context length × turns — every turn re-sends the entire conversation. The forty
+          files pasted at turn 3 are billed again at turn 30, and on every turn in between. The team
+          concludes the model got expensive; the session just never got cleaned.
+        </p>
+        <a class="more" href="#cost">Where the usage goes →</a>
+      </div>
+      <div class="card">
+        <div class="t">Compliance fails through friction</div>
+        <h3>Nobody regenerates an SBOM mid-sprint.</h3>
+        <p>
+          Not ignorance — tedium. The work is always less urgent than the feature, until it is
+          suddenly a deadline. EU Cyber Resilience Act vulnerability-reporting obligations begin
+          <b>11 September 2026</b> for anyone shipping software into the EU.
+        </p>
+        <a class="more" href="#compliance">EU compliance evidence →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COST / MODEL ROUTING ============ -->
+  <section id="cost">
+    <div class="stack">
+      <div class="eyebrow">Model routing · why you hit the limit</div>
+      <h2>You don't pay per prompt. You pay for the whole conversation, every&nbsp;turn.</h2>
+      <p class="lede muted">
+        Every turn re-sends the entire context back to the model — that is how a stateless API
+        carries a conversation at all. A long context isn't paid once; it is paid again on every
+        turn that follows. The <span class="k">model-routing</span> skill teaches that mechanism,
+        then works the levers in order of what they actually save — and "switch to a cheaper model"
+        is <em>third</em>, not first.
+      </p>
+    </div>
+
+    <div class="grid" style="margin-top:30px">
+      <div class="card">
+        <div class="t">Lever 01 · delegate</div>
+        <h3>Read-heavy work goes to a subagent.</h3>
+        <p>
+          A survey of forty files costs the main conversation almost nothing if a subagent reads
+          them and returns only the conclusion — the files live in <em>its</em> context, disposable
+          after the answer. Done inline, they sit in yours and are re-paid on every turn for the
+          rest of the session.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">Lever 02 · route</div>
+        <h3>Cheaper models — where there's no judgement to buy.</h3>
+        <p>
+          Most tasks are not architecture. A mechanical, fully-specified edit doesn't need the most
+          capable model available, and a subagent's <span class="k">model:</span> field pins the
+          cheap tier deliberately instead of by accident. The routing table below is the whole
+          decision.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">Lever 03 · hygiene</div>
+        <h3>The context you never cleaned.</h3>
+        <p>
+          Pasted command output, whole files read where a <span class="k">grep</span> would have
+          answered, one session dragged across unrelated tasks. <span class="k">/context</span>
+          shows what is silently costing you on every turn; <span class="k">/compact</span> and a
+          fresh session are the fix.
+        </p>
+      </div>
+    </div>
+
+    <div class="tw" style="margin-top:26px">
+      <table>
+        <thead><tr><th>Task shape</th><th>Tier</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Mechanical, fully specified — a rename, boilerplate, transcribing a spec</td>
+              <td><span class="k">haiku</span></td>
+              <td>There is no judgement to make. Paying for reasoning you don't use is pure waste.</td></tr>
+          <tr><td>Integration, multi-file work, debugging, pattern-matching</td>
+              <td><span class="k">sonnet</span></td>
+              <td>Needs judgement, but not deep design.</td></tr>
+          <tr><td>Architecture, design, hard review, subtle correctness</td>
+              <td><span class="k">opus</span> · <span class="k">fable</span></td>
+              <td>A wrong architectural call costs more than every token saved by going cheap.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note" style="margin-top:26px">
+      <b>The counter-rule: turn count beats token price.</b> A cheap model that takes three times
+      the turns re-sends the whole context on every extra turn — and ends up costing more than the
+      capable model that got it right first time. "Always use Haiku" is the wrong lesson; <em>least
+      total cost to a correct result</em> is the goal. And <span class="k">/fast</span> is a latency
+      lever, not a cost lever — same model, <b>higher</b> per-token price.
+    </p>
+  </section>
+
+  <!-- ============ HARNESS ASSURANCE ============ -->
+  <section id="assurance">
+    <div class="stack">
+      <div class="eyebrow">Harness assurance</div>
+      <h2>Scaffolding you can audit. Triggers you can prove.</h2>
+      <p class="lede muted">
+        A skill that never fires is dead code that looks alive. A skill that fires on everything is
+        noise with a good reputation. Both are invisible until someone measures them —
+        <span class="k">harness-audit</span> shows you what's there,
+        <span class="k">harness-eval</span> proves whether it works.
+      </p>
+    </div>
+
+    <div class="grid" style="margin-top:30px;grid-template-columns:repeat(auto-fit,minmax(380px,1fr))">
+      <div class="card">
+        <div class="t">harness-audit</div>
+        <h3>First, see what's there.</h3>
+        <p>
+          Inventories the eight surfaces a repo hands an agent — <span class="k">CLAUDE.md</span>,
+          skills, subagents, commands, hooks and the rest — and reports what's missing, what has
+          drifted, and what's competing for attention. Start here.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">harness-eval · the quorum</div>
+        <h3>Three blind judges per prompt.</h3>
+        <p>
+          Every trigger prompt is judged by three independent subagents: <b>no tools</b>, one prompt
+          each, one pinned model. They see only the <span class="k">description:</span> — because
+          that is all the real router sees at trigger time. A judge that can read the skill body is
+          not a judge; it's a cheat.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">harness-eval · the verdict</div>
+        <h3>FLAKY is a finding, not a rounding error.</h3>
+        <p>
+          A 2/3 split never rounds up to PASS. A clause the judges can't read consistently is a
+          clause the router won't apply consistently — the disagreement <em>is</em> the result, and
+          the judges' reasoning names the exact phrase to sharpen.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">harness-eval · regression</div>
+        <h3>A built-in skeptic marks your homework.</h3>
+        <p>
+          Pin an observable behavior, change one thing in the harness, re-run — then dispatch a
+          skeptic whose only job is to argue the change did nothing. If it can, you haven't shown
+          anything yet. A change that moves nothing is a finding too: that paragraph is dead weight.
+        </p>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:26px">
+      This is the same discipline this repo runs on itself — the <b>372 blind judgements</b> in the
+      evidence section below are <span class="k">harness-eval</span> applied to its own catalogue.
+      What we ship is what we use.
+    </p>
+  </section>
+
+  <!-- ============ EU COMPLIANCE EVIDENCE ============ -->
+  <section id="compliance">
+    <div class="stack">
+      <div class="eyebrow">EU compliance evidence</div>
+      <h2>11 September 2026 is not moving.</h2>
+      <p class="lede muted">
+        That is when EU Cyber Resilience Act vulnerability-reporting obligations begin for anyone
+        shipping software into the EU. Compliance fails through friction, not ignorance — so the
+        compliance track does the assembly work continuously and hands humans a review-ready draft,
+        not a deadline panic.
+      </p>
+    </div>
+
+    <div class="hero-grid" style="margin-top:30px;align-items:start">
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-t">compliance/ — the dossier, in the repo</span>
+        </div>
+        <div class="term-b">
+<span class="w">compliance/</span>
+├── <span class="hi">COMPLIANCE.md</span>            <span class="u">the dossier, review log included</span>
+├── <span class="hi">sbom/v2.3.cdx.json</span>       <span class="u">one CycloneDX SBOM per release ref</span>
+├── <span class="hi">vulns/CVE-2026-….md</span>      <span class="u">one triage record per finding</span>
+└── <span class="hi">a11y/axe-home.json</span>       <span class="u">EAA/WCAG scan output</span>
+
+<span class="u">status:</span> <span class="ok">Draft</span> <span class="u">— awaiting human review</span>
+        </div>
+      </div>
+
+      <div class="stack" style="gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r)">
+        <div class="card">
+          <div class="t">cra-evidence</div>
+          <h3>One skill, one dossier.</h3>
+          <p>
+            SBOM generation, supply-chain diff between releases, vulnerability scans with triage
+            drafts, a CRA Annex I gap report, EAA/WCAG accessibility scans — assembled into a
+            <span class="k">compliance/</span> directory that is ready for review, not
+            reconstruction.
+          </p>
+        </div>
+        <div class="card">
+          <div class="t">The contract</div>
+          <h3>Claude drafts. Humans approve.</h3>
+          <p>
+            Every artifact ships as <span class="k">Draft</span> or <span class="k">Proposed</span> —
+            the skill never marks anything Accepted or Compliant on its own initiative. CRA class and
+            EAA scope are legal determinations: asked once, recorded, never assumed. Legal
+            interpretation is deferred to counsel, explicitly.
+          </p>
+        </div>
+        <div class="card">
+          <div class="t">adr-management</div>
+          <h3>Why is the system like this?</h3>
+          <p>
+            Drafts the architecture decision record at the moment the decision is made, instead of
+            never. And when a vulnerability triage <em>accepts</em> a risk, that decision becomes an
+            ADR too — the two skills hand off to each other.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE CATALOGUE ============ -->
+  <section>
+    <div class="stack">
+      <div class="eyebrow">What's in it</div>
+      <h2>Seven skills, two tracks, one hook.</h2>
+      <p class="muted" style="max-width:64ch">
+        The harness track is stack-agnostic and applies to everyone. The compliance track is
+        EU-regulatory — skip it if that isn't you.
+      </p>
+    </div>
+
+    <div class="tw" style="margin-top:28px">
+      <table>
+        <thead><tr><th>Skill</th><th>Track</th><th>Answers</th></tr></thead>
+        <tbody>
+          <tr><td><span class="k">harness-audit</span></td><td class="trk">harness</td>
+              <td>What scaffolding does this repo give an agent, and what's missing? Inventories eight surfaces. <b>Start here.</b></td></tr>
+          <tr><td><span class="k">claude-md-authoring</span></td><td class="trk">harness</td>
+              <td>Is this <span class="k">CLAUDE.md</span> policy, or a skill in disguise? Diagnoses “the agent keeps ignoring X” — where the answer is almost never a stronger instruction.</td></tr>
+          <tr><td><span class="k">subagent-authoring</span></td><td class="trk">harness</td>
+              <td>Skill, subagent, slash command, or <b>hook</b>? The most common mistake is building a subagent where a hook was required.</td></tr>
+          <tr><td><span class="k">harness-eval</span></td><td class="trk">harness</td>
+              <td>Does this skill actually fire? Did that change actually help?</td></tr>
+          <tr><td><span class="k">model-routing</span></td><td class="trk">harness</td>
+              <td>Which model tier for which work — and why you hit the usage limit before the day ends.</td></tr>
+          <tr><td><span class="k">cra-evidence</span></td><td class="trk">compliance</td>
+              <td>SBOM, supply-chain diff, vulnerability triage, CRA Annex I gap report, accessibility scan — one reviewable dossier.</td></tr>
+          <tr><td><span class="k">adr-management</span></td><td class="trk">compliance</td>
+              <td>Why is the system like this? Drafts the decision record at the moment the decision is made, instead of never.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ THE GATE ============ -->
+  <section>
+    <div class="stack">
+      <div class="eyebrow">The hook</div>
+      <h2>A skill is advice. A hook is physics.</h2>
+      <p class="lede muted">
+        Everything in a skills catalogue is a procedure a model <em>should</em> follow — and a model
+        under pressure drops procedures, silently. The gate is the one artifact here it cannot skip.
+      </p>
+    </div>
+
+    <div class="grid" style="margin-top:30px">
+      <div class="card">
+        <div class="t">The rule</div>
+        <h3>Stale, not absent</h3>
+        <p>
+          It blocks a completion claim when a source file changed <em>after</em> the last passing test run.
+          Not “did the tests ever run” — that waves through the exact failure it exists to catch: run the
+          suite, make one more edit, declare victory.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">Passed, not merely ran</div>
+        <h3>It knows the difference</h3>
+        <p>
+          Claude Code fires <span class="k">PostToolUse</span> only when a tool call <em>succeeds</em>.
+          So if the recorder ran, the command exited zero. Verified empirically before it was relied on:
+          <span class="k">false | true</span> fires it; with <span class="k">pipefail</span>, it doesn't.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">Fails open, on purpose</div>
+        <h3>It will never trap you</h3>
+        <p>
+          Anything it doesn't understand allows the turn. A hook that blocks because <em>it</em> is
+          broken gets uninstalled within a day — and then it enforces nothing, forever. The only way to
+          be blocked is to actually have stale tests.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EVIDENCE ============ -->
+  <section id="evidence">
+    <div class="stack">
+      <div class="eyebrow">Evidence, never assertion</div>
+      <h2>We don't ask you to take our word for it.</h2>
+      <p class="muted" style="max-width:64ch">
+        That's the contract the whole repo is built on, and it applies to the repo itself.
+      </p>
+    </div>
+
+    <div class="grid" style="margin-top:30px">
+      <div class="card">
+        <div class="t">Blind quorum</div>
+        <h3>Every skill's trigger is judged by three strangers</h3>
+        <p>
+          Three independent subagents, <b>no tools</b>, one prompt each. They see only the
+          <span class="k">description:</span> — because that's all the real router sees. A split vote
+          is recorded <b>FLAKY</b> and <b>never rounded up to PASS</b>. 372 judgements. The ledger keeps
+          the rounds that failed.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">A fixture built to be broken</div>
+        <h3>The audit is tested against a bad repo</h3>
+        <p>
+          Five deliberate defects it must catch. A tool validated only against a healthy repo proves
+          nothing. Its README says, in as many words: <em>do not fix these — they are the test.</em>
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">Observed, not asserted</div>
+        <h3>The block fired in a real session</h3>
+        <p>
+          Plugin installed, headless run: the hook fired, the agent read the message, went and ran the
+          tests. Captured from platform debug logs — not synthetic input. 435 automated checks across
+          nine suites, on Linux and macOS.
+        </p>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:26px">
+      <b>And what it doesn't guarantee.</b> The Bash-edit detector is a text heuristic, not a shell parser.
+      Timestamps are second-granular. The claim detector is a regex and <em>will</em> miss phrasings —
+      it missed one during review, and that is recorded rather than hidden. The quorum's sample is small,
+      and says so. All of this is on the tin, not in a footnote.
+    </p>
+  </section>
+
+  <!-- ============ CONTRIBUTE ============ -->
+  <section>
+    <div class="stack">
+      <div class="eyebrow">Contribute</div>
+      <h2>The bar is concrete, and it's the interesting part.</h2>
+      <p class="lede muted">
+        Most skill repos accept a markdown file and hope. Here, a skill isn't done until it's
+        <em>proven to fire</em> — and that turns out to be the hard bit.
+      </p>
+    </div>
+
+    <div class="grid" style="margin-top:30px">
+      <div class="card">
+        <div class="t">01</div>
+        <h3>The description is the router</h3>
+        <p>
+          It is the only thing seen at trigger time. A “do NOT use this for X” carve-out in the body
+          cannot prevent a false trigger — the body is invisible when the decision is made.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">02</div>
+        <h3>So you must test it</h3>
+        <p>
+          At least five prompts that must fire and five that must not — including a neighbouring
+          skill's territory, because cross-triggering is the failure that actually bites.
+        </p>
+      </div>
+      <div class="card">
+        <div class="t">03</div>
+        <h3>And every script gets a contract test</h3>
+        <p>
+          bash or python3 stdlib only. No new dependencies. If it degrades, it degrades loudly.
+          CI runs all nine suites on Linux and macOS.
+        </p>
+      </div>
+    </div>
+
+    <div class="btns" style="margin-top:28px">
+      <a class="btn pri" href="https://github.com/Oltrematica/oltrematica-skills/blob/main/CONTRIBUTING.md">Read CONTRIBUTING</a>
+      <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/issues/new?template=skill_proposal.md">Propose a skill</a>
+      <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/blob/main/tests/harness/trigger-validation.md">The evidence ledger</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="stack" style="gap:14px">
+      <div class="eyebrow">Take it</div>
+      <h3 style="font-size:1.28rem">MIT. Fork it, ship it, tell us where it broke.</h3>
+      <div class="btns">
+        <a class="btn pri" href="https://github.com/Oltrematica/oltrematica-skills">github.com/Oltrematica/oltrematica-skills</a>
+        <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/blob/main/docs/harness/verification-gate.md">How the gate works</a>
+        <a class="btn" href="https://github.com/Oltrematica/oltrematica-skills/blob/main/SECURITY.md">Security</a>
+      </div>
+      <p class="note">
+        These are hooks and scripts that run on your machine with your permissions. That is what makes
+        them useful, and it is also the threat model — read what you install. Ours is all here.
+      </p>
+      <p class="muted" style="font-family:var(--mono);font-size:.72rem;margin-top:20px">
+        Built by Oltrematica · MIT · Claude drafts, humans approve
+      </p>
+    </div>
+  </footer>
+</div>
+
+<script>
+  document.querySelectorAll(".copy").forEach(function(b){
+    b.addEventListener("click", function(){
+      var t = document.getElementById(b.dataset.c).textContent;
+      navigator.clipboard.writeText(t).then(function(){
+        var o = b.textContent; b.textContent = "copied";
+        setTimeout(function(){ b.textContent = o; }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>
